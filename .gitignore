@@ -1,6 +1,17 @@
 # Secrets and credentials
-*.env
+.env
+.env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+*.kdbx
+secrets*.json
+credentials*.json
 
 # Python
 __pycache__/
@@ -10,31 +21,26 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# Generated run data (large / point-in-time)
-data/mcp_*.json
-data/supervision_state.json
-data/snapshot_*.json
-data/run_result_*.json
-data/dashboard.html
-data/agent_runlog.jsonl
-data/agent_summary_*.json
-data/bootstrap_state.json
-data/option_batch_*.txt
-data/option_codes_to_snapshot.txt
-data/qqq_kline_*.json
-data/spy_kline_*.json
-data/returns_cache.json
-data/risk_state.json
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+
+# Generated runtime data — ignore the whole tree; only public placeholders
+# and empty directory markers are tracked. This is safer than enumerating
+# individual filenames, which silently leaks anything not on the list.
+data/**
+!data/.gitkeep
+!data/chains/
+!data/chains/.gitkeep
+!data/quotes/
+!data/quotes/.gitkeep
 
 # Logs
-decision-logs/*.jsonl
+decision-logs/
 *.log
 
 # IDEs
 .vscode/
 .idea/
-data/earnings_dates.json
-data/universe.json
-
-# Interactive run scratch
-data/runs/
