@@ -4,7 +4,9 @@ Autonomous, risk-controlled options agent for the **Moomoo x Qoder AI Paper Trad
 
 ## Scope
 
-- Universe: SPY and QQQ long single-leg calls and puts.
+- Universe: SPY and QQQ (index ETFs) plus NVDA and AAPL (single names), long single-leg calls and puts.
+- Single names carry stricter liquidity gates (OI >= 1000, relative spread <= 3%) and an earnings blackout: no contract whose expiry spans the next earnings date, and no single-name trading at all if the earnings calendar is missing (fail closed).
+- Correlated-exposure clusters cap combined premium: SPY/QQQ share `index`, QQQ/NVDA/AAPL share `megacap_tech`, so a QQQ position consumes both budgets.
 - Pricing: American binomial tree with BSM European reference.
 - Forecasting: EWMA + Student-t physical-measure scenarios (M0 zero-drift baseline).
 - Selection: hard filters, robust expected net P&L, CVaR, premium sizing.

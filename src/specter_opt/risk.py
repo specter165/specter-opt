@@ -117,6 +117,7 @@ class RiskGuard:
         existing_positions_premium: float,
         pending_order_premium: float,
         ny_date: date,
+        cluster_headroom: Optional[float] = None,
     ) -> Tuple[bool, str, int]:
         """Evaluate single new-entry risk. Returns (allowed, reason, allowed_qty)."""
         can_trade, reason = self.update_equity(equity, ny_date)
@@ -128,6 +129,11 @@ class RiskGuard:
 
         # Per-trade budget including entry fees
         trade_budget = equity * self.risk.per_trade_premium_pct
+        # Correlated-cluster ceiling: treat the tighter of the two as the budget.
+        if cluster_headroom is not None:
+            trade_budget = min(trade_budget, max(cluster_headroom, 0.0))
+            if trade_budget <= 0:
+                return False, "cluster_cap", 0
         entry_premium = quantity * ask * multiplier
         total_entry_cost = entry_premium + fee_result.total_entry
         if total_entry_cost > trade_budget:
@@ -169,6 +175,45 @@ class RiskGuard:
         self.state.halted = False
         self.state.halt_reason = ""
         self.save_state()
+
+
+def compute_cluster_premium(
+    positions,
+    membership: Dict[str, tuple],
+) -> Dict[str, float]:
+    """Aggregate entry premium by correlation cluster.
+
+    A symbol may belong to several clusters (QQQ is both an index and ~9% NVDA),
+    so its premium is counted against every cluster it belongs to.
+    """
+    out: Dict[str, float] = {}
+    for p in positions:
+        u = getattr(p, "underlying", "") or ""
+        qty = int(getattr(p, "quantity", 0) or 0)
+        price = float(getattr(p, "entry_price", 0.0) or 0.0)
+        mult = int(getattr(p, "multiplier", 100) or 100)
+        premium = qty * price * mult
+        for cluster in membership.get(u, ()):  # type: ignore[arg-type]
+            out[cluster] = out.get(cluster, 0.0) + premium
+    return out
+
+
+def cluster_headroom(
+    equity: float,
+    cap_pct: float,
+    current: Dict[str, float],
+    symbol: str,
+    membership: Dict[str, tuple],
+) -> Optional[float]:
+    """Remaining premium budget for the tightest cluster the symbol belongs to.
+
+    Returns None when the symbol participates in no cluster (no constraint).
+    """
+    clusters = membership.get(symbol, ())
+    if not clusters:
+        return None
+    cap = equity * cap_pct
+    return min(cap - current.get(c, 0.0) for c in clusters)  # type: ignore[arg-type]
 
 
 def compute_portfolio_exposure(

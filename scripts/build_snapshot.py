@@ -29,6 +29,7 @@ Example:
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -105,10 +106,11 @@ def parse_orders(orders_json: Optional[dict]) -> List[dict]:
 def _underlying_from_code(code: str) -> str:
     if not code:
         return ""
-    # US.SPY260123C500000 -> SPY; US.SPY -> SPY
+    # US.SPY260123C500000 -> SPY; US.NVDA260123C500000 -> NVDA; US.SPY -> SPY
     body = code.split(".")[-1]
-    if len(body) >= 15 and body[-1] in "CP":
-        return body[:3]
+    m = re.match(r"^([A-Z]+)\d{6}[CP]\d+$", body)
+    if m:
+        return m.group(1)
     return body
 
 
@@ -206,14 +208,42 @@ def main():
     parser.add_argument("--account-meta", required=True, help="sim_trade_account_list entry JSON or full list")
     parser.add_argument("--positions", required=True, help="sim_trade_position_list JSON")
     parser.add_argument("--orders", help="sim_trade_history_order_list JSON")
-    parser.add_argument("--spy-chain", required=True, help="quote_option_chain JSON for US.SPY")
-    parser.add_argument("--qqq-chain", required=True, help="quote_option_chain JSON for US.QQQ")
-    parser.add_argument("--spy-quote", required=True, help="quote_stock_quote JSON")
-    parser.add_argument("--qqq-quote", required=True, help="quote_stock_quote JSON")
+    parser.add_argument("--chain", action="append", default=[], metavar="SYM=PATH",
+                        help="quote_option_chain JSON for SYM, repeatable (e.g. NVDA=data/nvda_chain.json)")
+    parser.add_argument("--quote", action="append", default=[], metavar="SYM=PATH",
+                        help="quote_stock_quote JSON for SYM, repeatable (e.g. NVDA=data/nvda_quote.json)")
+    parser.add_argument("--spy-chain", help="(legacy) quote_option_chain JSON for US.SPY")
+    parser.add_argument("--qqq-chain", help="(legacy) quote_option_chain JSON for US.QQQ")
+    parser.add_argument("--spy-quote", help="(legacy) quote_stock_quote JSON")
+    parser.add_argument("--qqq-quote", help="(legacy) quote_stock_quote JSON")
+    parser.add_argument("--earnings", help="JSON map {symbol: [YYYY-MM-DD, ...]} for earnings blackout")
     parser.add_argument("--option-snapshot", help="quote_market_snapshot JSON for option contracts")
     parser.add_argument("--returns-cache", help="returns_cache JSON")
     parser.add_argument("--out", default="data/snapshot_live.json", help="Output path")
     args = parser.parse_args()
+
+    def _kv(items, label):
+        out = {}
+        for item in items:
+            if "=" not in item:
+                parser.error(f"--{label} expects SYM=PATH, got {item!r}")
+            sym, path = item.split("=", 1)
+            out[sym.upper()] = path
+        return out
+
+    chain_paths = _kv(args.chain, "chain")
+    quote_paths = _kv(args.quote, "quote")
+    for sym, path in (("SPY", args.spy_chain), ("QQQ", args.qqq_chain)):
+        if path:
+            chain_paths.setdefault(sym, path)
+    for sym, path in (("SPY", args.spy_quote), ("QQQ", args.qqq_quote)):
+        if path:
+            quote_paths.setdefault(sym, path)
+    if not chain_paths or not quote_paths:
+        parser.error("provide at least one --chain and one --quote (or legacy --spy-chain/--spy-quote)")
+    missing_quotes = sorted(set(chain_paths) - set(quote_paths))
+    if missing_quotes:
+        parser.error(f"missing --quote for: {', '.join(missing_quotes)}")
 
     cash = load_json(args.account)
     account_meta = load_json(args.account_meta)
@@ -230,23 +260,25 @@ def main():
     positions = parse_positions(load_json(args.positions))
     open_orders = parse_orders(load_json(args.orders) if args.orders else None)
 
-    spy_chain = parse_option_chain(load_json(args.spy_chain), "SPY")
-    qqq_chain = parse_option_chain(load_json(args.qqq_chain), "QQQ")
-
     option_snapshot = build_quote_map(load_json(args.option_snapshot) if args.option_snapshot else None)
-    spy_chain = merge_quotes(spy_chain, option_snapshot)
-    qqq_chain = merge_quotes(qqq_chain, option_snapshot)
 
-    spy_quote = parse_stock_quote(load_json(args.spy_quote), "US.SPY")
-    qqq_quote = parse_stock_quote(load_json(args.qqq_quote), "US.QQQ")
+    chains: Dict[str, List[dict]] = {}
+    quotes_by_symbol: Dict[str, dict] = {}
+    for sym, path in chain_paths.items():
+        chains[sym] = merge_quotes(parse_option_chain(load_json(path), sym), option_snapshot)
+    for sym, path in quote_paths.items():
+        quotes_by_symbol[sym] = parse_stock_quote(load_json(path), f"US.{sym}")
 
     snapshot = {
         "account": account,
         "positions": positions,
         "open_orders": open_orders,
-        "option_chains": {"SPY": spy_chain, "QQQ": qqq_chain},
-        "underlying_quotes": {"SPY": spy_quote, "QQQ": qqq_quote},
+        "option_chains": chains,
+        "underlying_quotes": quotes_by_symbol,
     }
+
+    if args.earnings:
+        snapshot["earnings_dates"] = load_json(args.earnings)
 
     if args.returns_cache:
         snapshot["returns_cache"] = load_json(args.returns_cache)

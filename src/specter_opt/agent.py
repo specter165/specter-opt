@@ -13,12 +13,17 @@ import pytz
 from specter_opt.audit import DecisionLog
 from specter_opt.broker import BrokerAdapter, OptionContract, OrderIntent, Position
 from specter_opt.calendar import TradingCalendar, now_utc, ny_now
-from specter_opt.config import AgentConfig
+from specter_opt.config import AgentConfig, is_index_symbol
 from specter_opt.execution import ExecutionSupervisor
 from specter_opt.fees import option_fees
 from specter_opt.forecasting import build_joint_scenarios
 from specter_opt.pricing import american_tree, implied_volatility
-from specter_opt.risk import RiskGuard, compute_portfolio_exposure
+from specter_opt.risk import (
+    RiskGuard,
+    cluster_headroom,
+    compute_cluster_premium,
+    compute_portfolio_exposure,
+)
 from specter_opt.selection import Candidate, evaluate_candidate, rank_candidates, size_candidate
 
 
@@ -44,13 +49,48 @@ class AgentRunResult:
 
 
 class SpecterAgent:
-    def __init__(self, config: AgentConfig, broker: BrokerAdapter):
+    def __init__(
+        self,
+        config: AgentConfig,
+        broker: BrokerAdapter,
+        earnings_dates: Optional[Dict[str, List[str]]] = None,
+    ):
         self.config = config
         self.broker = broker
         self.risk = RiskGuard(config)
         self.exec_supervisor = ExecutionSupervisor(config.execution.intent_file)
         self.decision_log = DecisionLog(config.execution.decision_log)
         self.calendar = TradingCalendar(config.execution.timezone)
+        self.earnings_dates = earnings_dates or {}
+
+    def _div_yield(self, underlying: str) -> float:
+        """Per-underlying continuous dividend yield, with index-level fallback."""
+        y = self.config.dividend_yields.get(underlying)
+        return self.config.pricing.dividend_yield if y is None else y
+
+    def _next_earnings(self, underlying: str) -> Optional[date]:
+        today = ny_now().date()
+        dates = []
+        for raw in self.earnings_dates.get(underlying, []):
+            try:
+                d = date.fromisoformat(str(raw)[:10])
+            except Exception:
+                continue
+            if d >= today:
+                dates.append(d)
+        return min(dates) if dates else None
+
+    def _earnings_blocked(self, underlying: str) -> Tuple[bool, str]:
+        """Fail closed for single names without a usable earnings calendar."""
+        if not self.config.risk.earnings_blackout:
+            return False, ""
+        if is_index_symbol(underlying):
+            return False, ""
+        if self._next_earnings(underlying) is not None:
+            return False, ""
+        if self.config.risk.require_earnings_calendar:
+            return True, "missing_earnings_calendar"
+        return False, ""
 
     def verify_account(self) -> Tuple[bool, str, dict]:
         """Verify paper account identity and simulated status."""
@@ -95,6 +135,11 @@ class SpecterAgent:
     ) -> List[OptionContract]:
         """Apply eligibility filters including delta range via IV estimate."""
         r = self.config.risk
+        is_index = is_index_symbol(underlying)
+        max_spread = r.max_relative_spread if is_index else r.single_name_max_relative_spread
+        min_oi = r.min_open_interest if is_index else r.single_name_min_open_interest
+        next_earnings = None if is_index else self._next_earnings(underlying)
+        q = self._div_yield(underlying)
         filtered = []
         for c in contracts:
             if c.underlying != underlying:
@@ -107,11 +152,14 @@ class SpecterAgent:
                 continue
             if not (r.min_dte <= dte <= r.max_dte):
                 continue
+            # Never hold a contract across an earnings release.
+            if r.earnings_blackout and next_earnings is not None and expiry >= next_earnings:
+                continue
             if c.bid <= 0 or c.ask <= 0:
                 continue
-            if c.spread > r.max_relative_spread:
+            if c.spread > max_spread:
                 continue
-            if c.open_interest < r.min_open_interest:
+            if c.open_interest < min_oi:
                 continue
             if c.quote_age_seconds > r.max_quote_age_seconds:
                 continue
@@ -126,7 +174,7 @@ class SpecterAgent:
                     c.strike,
                     tau,
                     self.config.pricing.risk_free_rate,
-                    self.config.pricing.dividend_yield,
+                    q,
                     c.right,
                     american=True,
                     n_steps=20,
@@ -139,7 +187,7 @@ class SpecterAgent:
                 c.strike,
                 tau,
                 self.config.pricing.risk_free_rate,
-                self.config.pricing.dividend_yield,
+                q,
                 iv,
                 c.right,
                 n_steps=30,
@@ -199,7 +247,7 @@ class SpecterAgent:
         return scenarios
 
     def run(self, returns_cache: Optional[Dict[str, np.ndarray]] = None) -> AgentRunResult:
-        underlyings = ["SPY", "QQQ"]
+        underlyings = list(self.config.universe)
         ts = now_utc().isoformat()
         result = AgentRunResult(actions=[], mode=self.config.mode, timestamp_utc=ts)
 
@@ -245,6 +293,17 @@ class SpecterAgent:
         for u in underlyings:
             price = quotes.get(u, {}).get("last", 0.0)
             if price <= 0:
+                result.rejection_reasons.append(f"{u}:missing_quote")
+                self.decision_log.write(
+                    "SKIP_UNDERLYING", "missing_quote", {"underlying": u}
+                )
+                continue
+            blocked, block_reason = self._earnings_blocked(u)
+            if blocked:
+                result.rejection_reasons.append(f"{u}:{block_reason}")
+                self.decision_log.write(
+                    "SKIP_UNDERLYING", block_reason, {"underlying": u}
+                )
                 continue
             filtered = self._filter_chain(chains.get(u, []), price, u)
             for c in filtered:
@@ -252,7 +311,14 @@ class SpecterAgent:
                     scen = scenarios.get((u, h))
                     if scen is None:
                         continue
-                    cand = evaluate_candidate(c, scen, self.config, model="M0", horizon=h)
+                    cand = evaluate_candidate(
+                        c,
+                        scen,
+                        self.config,
+                        model="M0",
+                        horizon=h,
+                        dividend_yield=self._div_yield(u),
+                    )
                     candidates.append(cand)
 
         ranked = rank_candidates(candidates)
@@ -262,6 +328,7 @@ class SpecterAgent:
         pending_premium = sum(
             o.quantity * (o.price or 0.0) * 100 for o in open_orders
         )  # multiplier fallback handled by broker records
+        cluster_current = compute_cluster_premium(positions, self.config.cluster_membership)
 
         # 8. Select top candidate under limits
         selected: Optional[Candidate] = None
@@ -278,6 +345,13 @@ class SpecterAgent:
                 cand.rejection_reasons.append("zero_sized")
                 continue
             fee_result = option_fees(qty, cand.entry_ask, cand.contract.multiplier, self.config.fees)
+            headroom = cluster_headroom(
+                equity,
+                self.config.risk.cluster_premium_cap_pct,
+                cluster_current,
+                cand.contract.underlying,
+                self.config.cluster_membership,
+            )
             allowed, reason, allowed_qty = self.risk.can_enter(
                 equity,
                 qty,
@@ -287,6 +361,7 @@ class SpecterAgent:
                 existing_premium,
                 pending_premium,
                 ny_date,
+                cluster_headroom=headroom,
             )
             if not allowed:
                 cand.rejection_reasons.append(f"risk_gate:{reason}")

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Build a historical daily log-returns cache for SPY/QQQ from Moomoo K-lines.
+"""Build a historical daily log-returns cache from Moomoo K-lines.
 
 Usage:
-  python scripts/build_returns_cache.py --out data/returns_cache.json
+  python scripts/build_returns_cache.py --kline SPY=spy_kline.json --kline NVDA=nvda_kline.json --out data/returns_cache.json
+
+Legacy flags --spy-kline / --qqq-kline still work.
 """
 
 import argparse
@@ -35,28 +37,38 @@ def _closes_to_log_returns(closes: List[float]) -> List[float]:
     return [math.log(closes[i] / closes[i - 1]) for i in range(1, len(closes))]
 
 
-def build_cache(spy_kline_path: str, qqq_kline_path: str) -> Dict[str, List[float]]:
-    spy_closes = [bar["close"] for bar in _parse_kline(spy_kline_path)]
-    qqq_closes = [bar["close"] for bar in _parse_kline(qqq_kline_path)]
-    return {
-        "SPY": _closes_to_log_returns(spy_closes),
-        "QQQ": _closes_to_log_returns(qqq_closes),
-    }
+def build_cache(kline_paths: Dict[str, str]) -> Dict[str, List[float]]:
+    cache: Dict[str, List[float]] = {}
+    for symbol, path in kline_paths.items():
+        closes = [bar["close"] for bar in _parse_kline(path)]
+        cache[symbol.upper()] = _closes_to_log_returns(closes)
+    return cache
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build SPY/QQQ returns cache")
-    parser.add_argument("--spy-kline", help="Path to SPY K-line JSON from MCP")
-    parser.add_argument("--qqq-kline", help="Path to QQQ K-line JSON from MCP")
+    parser = argparse.ArgumentParser(description="Build returns cache for one or more underlyings")
+    parser.add_argument("--kline", action="append", default=[], metavar="SYM=PATH",
+                        help="K-line JSON for SYM, repeatable")
+    parser.add_argument("--spy-kline", help="(legacy) Path to SPY K-line JSON")
+    parser.add_argument("--qqq-kline", help="(legacy) Path to QQQ K-line JSON")
     parser.add_argument("--out", default="data/returns_cache.json", help="Output JSON path")
     args = parser.parse_args()
 
-    if not args.spy_kline or not args.qqq_kline:
-        print("ERROR: --spy-kline and --qqq-kline are required", file=sys.stderr)
-        sys.exit(1)
+    paths: Dict[str, str] = {}
+    for item in args.kline:
+        if "=" not in item:
+            parser.error(f"--kline expects SYM=PATH, got {item!r}")
+        sym, path = item.split("=", 1)
+        paths[sym.upper()] = path
+    if args.spy_kline:
+        paths.setdefault("SPY", args.spy_kline)
+    if args.qqq_kline:
+        paths.setdefault("QQQ", args.qqq_kline)
+    if not paths:
+        parser.error("provide at least one --kline SYM=PATH (or legacy --spy-kline/--qqq-kline)")
 
-    cache = build_cache(args.spy_kline, args.qqq_kline)
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    cache = build_cache(paths)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(cache, f, indent=2)
 

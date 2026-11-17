@@ -69,7 +69,15 @@ Implemented under `/data/specter-opt`:
   - `orchestrator.py` — coordinates agents through a shared `AgentContext`.
 - `scripts/run_agent.py` — entry point to run individual agents or the full pipeline.
 
-Strategy scope: SPY/QQQ long single-leg calls/puts only; no shorts, borrowing, or uncovered exposure.
+Strategy scope: SPY/QQQ/NVDA/AAPL long single-leg calls/puts only; no shorts, borrowing, or uncovered exposure.
+
+Universe controls added in v1.1.0:
+
+- Per-symbol dividend yields (SPY 1.20%, QQQ 0.55%, NVDA 0.03%, AAPL 0.40%) feed the American tree and IV inversion instead of one index-level constant.
+- Single-name liquidity gates are stricter than index gates (OI >= 1000, relative spread <= 3%) because single-name wings are thinner.
+- Earnings blackout drops any contract whose expiry falls on or after the next earnings date, and fails closed (skips the symbol) when no earnings calendar is supplied.
+- Correlated-cluster cap: `cluster_premium_cap_pct = 2%` of equity per cluster, with multi-membership (QQQ counts against both `index` and `megacap_tech`).
+- Snapshot builder, returns-cache builder and option-code parsing are now N-underlying (4-character tickers supported); legacy `--spy-*`/`--qqq-*` flags still work.
 
 ## 4. Test and validation evidence
 
@@ -80,7 +88,8 @@ Strategy scope: SPY/QQQ long single-leg calls/puts only; no shorts, borrowing, o
 | `tests/test_risk.py` | 5 | Pass |
 | `tests/test_selection.py` | 6 | Pass |
 | `tests/test_execution.py` | 6 | Pass |
-| **Total** | **28/28** | **Pass** |
+| `tests/test_universe.py` | 7 | Pass |
+| **Total** | **35/35** | **Pass** |
 
 Validation performed:
 - BSM put-call parity and IV inversion.
@@ -90,6 +99,10 @@ Validation performed:
 - Risk guard blocks daily loss, peak drawdown, and aggregate premium.
 - Risk state persists across reloads.
 - Execution supervisor prevents duplicate intents and survives restart.
+- Single-name contracts are rejected at index-level spread/OI, and accepted at single-name thresholds.
+- Earnings blackout removes contracts expiring on/after the next earnings date; missing calendars fail closed.
+- Cluster headroom applies the tightest cluster for multi-membership symbols (QQQ).
+- Option-code parsing resolves 4-character tickers (NVDA, AAPL, GOOGL).
 - Execution supervisor reconciles partial fills.
 - Agent logs broker submit-time exceptions instead of crashing.
 - Agent fails closed on account mismatch and returns HOLD when no candidate passes.

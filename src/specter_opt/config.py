@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,14 @@ class RiskConfig:
     max_abs_delta: float = 0.70
     max_relative_spread: float = 0.05
     min_open_interest: int = 500
+    # Stricter gates for single-name options: wider wings, thinner books.
+    single_name_max_relative_spread: float = 0.03
+    single_name_min_open_interest: int = 1000
+    # Never hold a contract whose life spans an earnings release.
+    earnings_blackout: bool = True
+    require_earnings_calendar: bool = True
+    # Correlated-exposure ceiling per cluster, as a fraction of equity.
+    cluster_premium_cap_pct: float = 0.02
     max_quote_age_seconds: float = 10.0
     exit_before_expiry_sessions: int = 1
     cvar_alpha: float = 0.95
@@ -93,13 +101,40 @@ class FeeConfig:
 class AgentConfig:
     """Top-level agent configuration."""
 
+    universe: List[str] = field(default_factory=lambda: ["SPY", "QQQ", "NVDA", "AAPL"])
+    # Approximate continuous dividend yields; index-level fallback is pricing.dividend_yield.
+    dividend_yields: Dict[str, float] = field(
+        default_factory=lambda: {
+            "SPY": 0.0120,
+            "QQQ": 0.0055,
+            "NVDA": 0.0003,
+            "AAPL": 0.0040,
+        }
+    )
+    # Correlated-exposure clusters: a symbol in N clusters consumes N budgets.
+    cluster_membership: Dict[str, Tuple[str, ...]] = field(
+        default_factory=lambda: {
+            "SPY": ("index",),
+            "QQQ": ("index", "megacap_tech"),
+            "NVDA": ("megacap_tech",),
+            "AAPL": ("megacap_tech",),
+        }
+    )
     risk: RiskConfig = field(default_factory=RiskConfig)
     forecast: ForecastConfig = field(default_factory=ForecastConfig)
     pricing: PricingConfig = field(default_factory=PricingConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     fees: FeeConfig = field(default_factory=FeeConfig)
     mode: str = "shadow"  # "shadow", "paper", "halt"
-    version: str = "1.0.0"
+    version: str = "1.1.0"
+
+
+INDEX_SYMBOLS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
+
+
+def is_index_symbol(symbol: str) -> bool:
+    """True for broad-based ETFs, which get looser liquidity gates."""
+    return symbol.upper() in INDEX_SYMBOLS
 
 
 # Singleton loaded from environment for operational use.

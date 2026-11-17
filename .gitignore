@@ -33,3 +33,4 @@ decision-logs/*.jsonl
 # IDEs
 .vscode/
 .idea/
+data/earnings_dates.json

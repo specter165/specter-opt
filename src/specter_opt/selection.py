@@ -6,7 +6,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 import numpy as np
 
 from specter_opt.broker import OptionContract
-from specter_opt.config import AgentConfig
+from specter_opt.config import AgentConfig, is_index_symbol
 from specter_opt.fees import option_fees, round_lot_quantity
 from specter_opt.forecasting import ScenarioSet
 from specter_opt.pricing import american_tree_raw, bsm_price
@@ -40,9 +40,14 @@ def screen_contract(contract: OptionContract, config: AgentConfig) -> List[str]:
         reasons.append("invalid_right")
     if contract.ask <= 0:
         reasons.append("no_ask")
-    if contract.spread > r.max_relative_spread:
+    if is_index_symbol(contract.underlying):
+        max_spread, min_oi = r.max_relative_spread, r.min_open_interest
+    else:
+        max_spread = r.single_name_max_relative_spread
+        min_oi = r.single_name_min_open_interest
+    if contract.spread > max_spread:
         reasons.append("wide_spread")
-    if contract.open_interest < r.min_open_interest:
+    if contract.open_interest < min_oi:
         reasons.append("low_oi")
     if contract.quote_age_seconds > r.max_quote_age_seconds:
         reasons.append("stale_quote")
@@ -56,10 +61,11 @@ def evaluate_candidate(
     model: str = "M0",
     horizon: int = 1,
     exit_spread_factor: float = 1.0,
+    dividend_yield: Optional[float] = None,
 ) -> Candidate:
     """Reprice contract under each scenario and compute EV/CVaR."""
     r = config.pricing.risk_free_rate
-    q = config.pricing.dividend_yield
+    q = config.pricing.dividend_yield if dividend_yield is None else dividend_yield
     multiplier = contract.multiplier
     entry_ask = contract.ask
 

@@ -8,6 +8,7 @@ The snapshot JSON must contain keys:
   option_chains: dict[underlying -> list[dict]]
   underlying_quotes: dict[underlying -> dict]
   returns_cache: optional dict[underlying -> list[float]]
+  earnings_dates: optional dict[underlying -> list["YYYY-MM-DD"]]
 
 Example:
   python scripts/run_moomoo_paper.py --snapshot data/snapshot.json --mode shadow
@@ -112,7 +113,11 @@ def main():
             k: np.array(v, dtype=float) for k, v in snapshot["returns_cache"].items()
         }
 
-    agent = SpecterAgent(config, broker)
+    agent = SpecterAgent(
+        config,
+        broker,
+        earnings_dates=snapshot.get("earnings_dates", {}),
+    )
     result = agent.run(returns_cache=returns_cache)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
