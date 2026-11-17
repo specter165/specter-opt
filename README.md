@@ -78,7 +78,7 @@ Use the Qoder Forward scheduler (cron/interval) to trigger the assistant at set 
 
 | Control | Value |
 |---|---|
-| Per-trade premium + entry cost | 0.5% equity |
+| Per-trade premium + entry cost | 1.0% equity |
 | Aggregate open premium | 3% equity |
 | Concurrent positions | 3 |
 | Daily equity loss block | 2% |

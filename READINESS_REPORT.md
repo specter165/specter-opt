@@ -184,7 +184,7 @@ No pending intents were written to `data/pending_paper_orders.jsonl`, so no `sim
 
 | Control | Setting | Evidence |
 |---|---|---|
-| Per-trade premium + entry cost | 0.5% equity | Enforced in `RiskGuard.can_enter` |
+| Per-trade premium + entry cost | 1.0% equity | Enforced in `RiskGuard.can_enter` |
 | Aggregate open premium | 3% equity | Enforced incl. existing, pending, reserved |
 | Concurrent positions | 3 | Enforced by position count |
 | Daily equity loss block | 2% | Tested and persisted |

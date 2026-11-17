@@ -147,7 +147,7 @@ underlying is logged as `EARNINGS_UNKNOWN / calendar_unavailable_dte_capped`.
 
 See `docs/THESIS.md` §4 for the full table. Summary:
 
-- 0.5% equity premium per trade · 3% aggregate · 2% per correlation cluster · 3 positions
+- 1.0% equity premium per trade · 3% aggregate · 2% per correlation cluster · 3 positions
 - 30% premium stop · close one session before expiry
 - 2% daily loss → no new entries · 5% peak drawdown → persisted halt
 - 20 orders/day · long single-leg only · no shorts, no borrowing, no uncovered

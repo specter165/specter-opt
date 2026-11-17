@@ -95,8 +95,8 @@ All limits are enforced in `src/specter_opt/risk.py` and persisted in
 
 | Control | Value | Notes |
 |---|---|---|
-| Premium per trade | 0.5% equity ($500) | includes entry cost and fees |
-| Aggregate open premium | 1.2% equity ($1,200) | binds before three full-size positions (3 × 0.5% = 1.5%) |
+| Premium per trade | 1.0% equity ($1,000) | includes entry cost and fees; one SPY contract must fit |
+| Aggregate open premium | 3.0% equity ($3,000) | exactly three full-size positions (3 × 1.0%) |
 | Correlated cluster | 2% equity ($2,000) | `index` = {SPY, QQQ}; `megacap_tech` = {QQQ, NVDA, AAPL}; screener names → `single_name` |
 | Concurrent positions | 3 | |
 | Orders per US trading day | 20 | |
@@ -156,6 +156,6 @@ Cluster membership is multi-valued: a QQQ position consumes both the `index` and
 - **Edge:** buy single-leg convexity only where scenario EV, after a CVaR95 fat-tail
   penalty and fees, remains positive.
 - **Invalidation:** seven pre-committed falsification tests; I1 or I4 halts the strategy.
-- **Risk:** 0.5% per trade / 3% aggregate / 2% per cluster / 3 positions / 30% stop /
+- **Risk:** 1.0% per trade / 3% aggregate / 2% per cluster / 3 positions / 30% stop /
   2% daily block / 5% peak halt / hard expiry.
 - **Expected behaviour:** mostly `HOLD`. A flat week is the strategy working, not failing.
