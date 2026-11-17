@@ -19,6 +19,11 @@ Autonomous, risk-controlled options agent for the **Moomoo x Qoder AI Paper Trad
 
 Current mode: **paper** for the Moomoo x Qoder AI Trading Agent Challenge account `5830137`, authorized until 1 December 2026. The agent runs autonomously via Qoder Forward schedules.
 
+Read next: **[Trading thesis and invalidation](docs/THESIS.md)** — what the edge is, why it
+can exist, and the seven pre-committed conditions that disprove it.
+**[Agent report](docs/REPORT.md)** — architecture, decision loop, live-run results, and
+what we would build next.
+
 ## Project layout
 
 ```

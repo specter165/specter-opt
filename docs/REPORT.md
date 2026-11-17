@@ -1,0 +1,161 @@
+# SPECTER-OPT — Agent Report
+
+**Moomoo x Qoder AI Paper Trading Agent Challenge**
+Paper account `5830137` · $100,000 · authorized through 2026-12-01
+Repo: `https://github.com/specter165/specter-opt`
+
+---
+
+## 1. What this agent is
+
+An autonomous, risk-controlled options agent that runs on a schedule, prices the
+option market against its own distribution, and mostly decides not to trade.
+
+It is not a signal generator pointed at a fixed ticker list. The tradable universe is
+re-derived from the market each morning, the entry test is a comparison of two
+distributions rather than a technical indicator, and every limit is enforced in code
+with persisted state so a restart cannot forget it.
+
+---
+
+## 2. Architecture
+
+```
+                    ┌───────────────────────────────┐
+  Qoder Forward     │  9 cron schedules             │
+  scheduler ───────▶│  scan · supervise · report    │
+                    └──────────────┬────────────────┘
+                                   │ fresh sandbox → git clone
+                                   ▼
+   ┌────────────────────────────────────────────────────────────┐
+   │  Moomoo MCP tools                                          │
+   │  quote_option_screen · quote_option_chain ·                │
+   │  quote_market_snapshot · quote_stock_quote ·               │
+   │  sim_trade_cash_info / position_list / input_order         │
+   └───────────────┬────────────────────────────────────────────┘
+                   │ JSON payloads (saved to data/)
+                   ▼
+   ┌───────────────┴────────────────────────────────────────────┐
+   │  build_universe.py   screener → top-8 underlyings          │
+   │  build_snapshot.py   MCP JSON → normalised snapshot        │
+   └───────────────┬────────────────────────────────────────────┘
+                   ▼
+   ┌────────────────────────────────────────────────────────────┐
+   │  SpecterAgent.run()                                        │
+   │    verify account ▸ trading day ▸ quotes ▸ chains          │
+   │    ▸ IV imputation ▸ scenarios ▸ screen ▸ rank ▸ size      │
+   │    ▸ risk gate ▸ intent                                    │
+   └───────────────┬────────────────────────────────────────────┘
+                   ▼
+        HOLD  (no candidate)  ──or──  limit intent → paper order
+```
+
+### Modules
+
+| Module | Responsibility |
+|---|---|
+| `config.py` | Every limit as a frozen dataclass; no magic numbers in logic |
+| `universe.py` | Screener aggregation, filters, deterministic ranking, 8h cache |
+| `pricing.py` | CRR American binomial tree; BSM European reference; IV inversion |
+| `forecasting.py` | EWMA variance + Student-t scenarios (M0 zero-drift baseline) |
+| `selection.py` | Hard filters, robust edge, CVaR95, integer sizing |
+| `risk.py` | Premium budgets, cluster caps, drawdown halts, reservations |
+| `agent.py` | Orchestration, earnings gate, IV imputation, decision logging |
+| `moomoo_broker.py` | Snapshot-backed broker adapter; order intent plumbing |
+| `scripts/` | Runners, universe builder, snapshot builder, dashboard, bootstrap |
+
+---
+
+## 3. The decision loop
+
+Executed every 30 minutes during US hours.
+
+1. **Bootstrap.** Clone the repo fresh; verify the expected CLI surface exists. A stale
+   copy aborts the run rather than silently executing old code.
+2. **Universe.** Aggregate `quote_option_screen` by underlying; apply hard liquidity
+   filters; rank by a z-scored composite; keep 8; cache for 8 hours.
+3. **Data.** Chains, underlying quotes, option snapshots (bid/ask/OI/IV/greeks),
+   account, positions, orders.
+4. **Normalise.** Percent IV → decimal. Missing underlying IV → imputed from
+   near-the-money chain contracts and logged.
+5. **Gate.** Earnings blackout (fail closed), quote freshness, delta/DTE/spread/OI.
+6. **Price.** CRR American tree per contract, with per-symbol dividend yield.
+7. **Score.** Scenario EV minus a CVaR95 penalty → `robust_edge`.
+8. **Size.** Integer contracts against per-trade, aggregate and cluster budgets.
+9. **Decide.** Order, or `HOLD / no_candidate` with the reason written to the log.
+
+---
+
+## 4. What it actually did
+
+### First live run on the new methodology (2026-11-17)
+
+| Stage | Result |
+|---|---|
+| Screener candidates | 23 underlyings → 114 excluded on hard filters |
+| Universe | SPY, NVDA, QQQ, IWM, IBIT, INTC, MSTR, SPCX |
+| Contracts in band (7–21 DTE, \|Δ\| 0.35–0.70) | 644 |
+| Passing hard filters | 155 (150 in the interactive run) |
+| With positive robust edge | **0** |
+| Best candidate | IWM 261127 275P, Δ −0.66, EV **−$194.98** |
+| Decision | **HOLD** — no intents, no orders |
+| Blocked by earnings gate | NVDA, IBIT, INTC, MSTR, SPCX (`missing_earnings_calendar`) |
+
+The system evaluated 150+ contracts and bought none, because the best one on the board
+was still ~$195 too expensive relative to its modelled value. **This is the intended
+output, not a failure.** With a zero-drift baseline there is no directional view to pay
+theta for; the only reason to own premium is dispersion, and today the market was not
+offering it.
+
+### Operational history
+
+- 14 scheduled supervision runs reported "prerequisites absent" — a genuine
+  deployment failure, not a market verdict. Root cause: schedule sandboxes start empty
+  and the prompts searched for a repo rather than cloning one.
+- Fixed by hardcoding the clone, adding a stale-repo check, and making bootstrap create
+  the runtime directories. Supervision then correctly detected a fill, re-baselined
+  two stale orders, and posted to Slack (HTTP 200).
+
+---
+
+## 5. Risk controls
+
+See `docs/THESIS.md` §4 for the full table. Summary:
+
+- 0.5% equity premium per trade · 3% aggregate · 2% per correlation cluster · 3 positions
+- 30% premium stop · close one session before expiry
+- 2% daily loss → no new entries · 5% peak drawdown → persisted halt
+- 20 orders/day · long single-leg only · no shorts, no borrowing, no uncovered
+- Earnings blackout, fail closed · stale quotes rejected · reconciliation before submit
+- Fail-closed default: an exception produces no order, never a best guess
+
+---
+
+## 6. What we would build next
+
+1. **Earnings calendar ingestion.** Two-thirds of the screened universe is currently
+   blocked by the fail-closed earnings gate. The fix is a validated dates cache, not a
+   guess: last report date from the broker plus a widened ±7-day blackout window, so
+   the gate can narrow without ever failing open.
+2. **Short premium, cash-secured puts only.** The variance risk premium sits on the
+   selling side; long premium is the hard half of the trade. Requires a collateral-based
+   risk budget instead of a premium-based one.
+3. **Take-profit / trailing exit.** Today's only exit is a 30% stop. A winner that
+   round-trips gives back the gain without ever tripping it.
+4. **Volatility targeting.** Size is premium-budgeted, not risk-scaled, so per-trade
+   risk varies with the regime.
+
+---
+
+## 7. Honest assessment
+
+The engineering is the strong part: deterministic sizing, persisted risk state,
+fail-closed defaults, a test suite covering the failure modes that actually occurred,
+and a deployment that now recovers itself.
+
+The trading record is not yet a record. Two weeks and a handful of runs — most of them
+spent fixing deployment — cannot establish an edge, and forcing trades to manufacture
+one would destroy the only defensible claim this system has: that it declines to trade
+when it cannot price an advantage.
+
+A flat week here is the strategy working as specified.

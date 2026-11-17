@@ -222,6 +222,47 @@ class SpecterAgent:
             )
         return filtered
 
+    def _impute_underlying_iv(
+        self,
+        underlyings: List[str],
+        quotes: Dict[str, dict],
+        chains: Dict[str, List[OptionContract]],
+    ) -> None:
+        """Fill missing underlying IV from the chain's near-the-money contracts.
+
+        Broker quote payloads do not always carry an underlying implied vol, and
+        the forecast needs one. Deriving it from the chain is local data, not a
+        guess about direction, so it is safe to impute; we log every imputation.
+        """
+        for u in underlyings:
+            q = quotes.get(u) or {}
+            raw = q.get("iv")
+            try:
+                iv = float(raw) if raw is not None else 0.0
+            except (TypeError, ValueError):
+                iv = 0.0
+            if iv > 0:
+                continue
+            price = 0.0
+            try:
+                price = float(q.get("last", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                price = 0.0
+            if price <= 0:
+                continue
+            usable = [c for c in chains.get(u, []) if c.iv and c.iv > 0]
+            if not usable:
+                continue
+            usable.sort(key=lambda c: abs(c.strike - price))
+            sample = [float(c.iv) for c in usable[:8]]
+            imputed = sorted(sample)[len(sample) // 2]
+            q = dict(q)
+            q["iv"] = imputed
+            quotes[u] = q
+            self.decision_log.write(
+                "IMPUTE_IV", "chain_near_money_median", {"underlying": u, "iv": imputed}
+            )
+
     def _build_forecasts(
         self,
         underlyings: List[str],
@@ -233,7 +274,13 @@ class SpecterAgent:
         # For MVP: equal zero-drift for all; M1+ would use returns cache and features.
         for u in underlyings:
             price = quotes[u].get("last", 0.0)
-            iv = quotes[u].get("iv", 0.20)
+            raw_iv = quotes[u].get("iv")
+            try:
+                iv = float(raw_iv) if raw_iv is not None else 0.20
+            except (TypeError, ValueError):
+                iv = 0.20
+            if iv <= 0:
+                iv = 0.20
             if price <= 0:
                 continue
             rets = returns_cache.get(u, np.zeros(60))
@@ -289,6 +336,7 @@ class SpecterAgent:
 
         # 6. Build scenarios
         returns_cache = returns_cache or {u: np.zeros(60) for u in underlyings}
+        self._impute_underlying_iv(underlyings, quotes, chains)
         scenarios = self._build_forecasts(underlyings, quotes, returns_cache)
 
         # 7. Screen and evaluate candidates
