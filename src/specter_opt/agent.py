@@ -54,6 +54,7 @@ class SpecterAgent:
         config: AgentConfig,
         broker: BrokerAdapter,
         earnings_dates: Optional[Dict[str, List[str]]] = None,
+        universe: Optional[List[str]] = None,
     ):
         self.config = config
         self.broker = broker
@@ -62,6 +63,8 @@ class SpecterAgent:
         self.decision_log = DecisionLog(config.execution.decision_log)
         self.calendar = TradingCalendar(config.execution.timezone)
         self.earnings_dates = earnings_dates or {}
+        # Screener-selected universe wins; config.universe is the fallback.
+        self.universe = list(universe) if universe else list(config.universe)
 
     def _div_yield(self, underlying: str) -> float:
         """Per-underlying continuous dividend yield, with index-level fallback."""
@@ -247,7 +250,7 @@ class SpecterAgent:
         return scenarios
 
     def run(self, returns_cache: Optional[Dict[str, np.ndarray]] = None) -> AgentRunResult:
-        underlyings = list(self.config.universe)
+        underlyings = list(self.universe)
         ts = now_utc().isoformat()
         result = AgentRunResult(actions=[], mode=self.config.mode, timestamp_utc=ts)
 
@@ -328,7 +331,11 @@ class SpecterAgent:
         pending_premium = sum(
             o.quantity * (o.price or 0.0) * 100 for o in open_orders
         )  # multiplier fallback handled by broker records
-        cluster_current = compute_cluster_premium(positions, self.config.cluster_membership)
+        cluster_current = compute_cluster_premium(
+            positions,
+            self.config.cluster_membership,
+            self.config.risk.default_cluster,
+        )
 
         # 8. Select top candidate under limits
         selected: Optional[Candidate] = None
@@ -351,6 +358,7 @@ class SpecterAgent:
                 cluster_current,
                 cand.contract.underlying,
                 self.config.cluster_membership,
+                self.config.risk.default_cluster,
             )
             allowed, reason, allowed_qty = self.risk.can_enter(
                 equity,

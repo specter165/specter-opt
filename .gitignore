@@ -34,3 +34,4 @@ decision-logs/*.jsonl
 .vscode/
 .idea/
 data/earnings_dates.json
+data/universe.json

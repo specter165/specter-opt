@@ -177,14 +177,23 @@ class RiskGuard:
         self.save_state()
 
 
+def _clusters_for(symbol: str, membership: Dict[str, tuple], default_cluster: str) -> tuple:
+    clusters = membership.get(symbol)
+    if clusters:
+        return tuple(clusters)
+    return (default_cluster,) if default_cluster else ()
+
+
 def compute_cluster_premium(
     positions,
     membership: Dict[str, tuple],
+    default_cluster: str = "",
 ) -> Dict[str, float]:
     """Aggregate entry premium by correlation cluster.
 
     A symbol may belong to several clusters (QQQ is both an index and ~9% NVDA),
-    so its premium is counted against every cluster it belongs to.
+    so its premium is counted against every cluster it belongs to. Symbols that
+    were discovered by the screener fall into ``default_cluster``.
     """
     out: Dict[str, float] = {}
     for p in positions:
@@ -193,7 +202,7 @@ def compute_cluster_premium(
         price = float(getattr(p, "entry_price", 0.0) or 0.0)
         mult = int(getattr(p, "multiplier", 100) or 100)
         premium = qty * price * mult
-        for cluster in membership.get(u, ()):  # type: ignore[arg-type]
+        for cluster in _clusters_for(u, membership, default_cluster):
             out[cluster] = out.get(cluster, 0.0) + premium
     return out
 
@@ -204,16 +213,17 @@ def cluster_headroom(
     current: Dict[str, float],
     symbol: str,
     membership: Dict[str, tuple],
+    default_cluster: str = "",
 ) -> Optional[float]:
     """Remaining premium budget for the tightest cluster the symbol belongs to.
 
     Returns None when the symbol participates in no cluster (no constraint).
     """
-    clusters = membership.get(symbol, ())
+    clusters = _clusters_for(symbol, membership, default_cluster)
     if not clusters:
         return None
     cap = equity * cap_pct
-    return min(cap - current.get(c, 0.0) for c in clusters)  # type: ignore[arg-type]
+    return min(cap - current.get(c, 0.0) for c in clusters)
 
 
 def compute_portfolio_exposure(

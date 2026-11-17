@@ -69,7 +69,15 @@ Implemented under `/data/specter-opt`:
   - `orchestrator.py` — coordinates agents through a shared `AgentContext`.
 - `scripts/run_agent.py` — entry point to run individual agents or the full pipeline.
 
-Strategy scope: SPY/QQQ/NVDA/AAPL long single-leg calls/puts only; no shorts, borrowing, or uncovered exposure.
+Strategy scope: long single-leg calls/puts on a screener-selected universe; no shorts, borrowing, or uncovered exposure.
+
+Dynamic universe (v1.2.0):
+
+- `scripts/build_universe.py` aggregates `quote_option_screen` contract rows to the underlying level and ranks by a deterministic composite of log(option volume), log(open interest) and IV (weights 0.5/0.3/0.2).
+- Hard filters: aggregate option volume >= 5,000, aggregate OI >= 20,000, underlying price $10–$5,000, IV 8%–200%, configurable exclusions.
+- Cap 8 symbols per session; cached in `data/universe.json` with an 8-hour TTL so the 12 intraday scans do not repeat the screener call.
+- `build_snapshot.py --universe` embeds the selected symbols into the snapshot; `run_moomoo_paper.py` passes them to the agent, which uses them instead of the static config list.
+- Screener symbols without a configured cluster fall into `single_name` (2% premium cap), so concentration limits still bind for auto-discovered names.
 
 Universe controls added in v1.1.0:
 
@@ -89,7 +97,8 @@ Universe controls added in v1.1.0:
 | `tests/test_selection.py` | 6 | Pass |
 | `tests/test_execution.py` | 6 | Pass |
 | `tests/test_universe.py` | 7 | Pass |
-| **Total** | **35/35** | **Pass** |
+| `tests/test_universe_selection.py` | 6 | Pass |
+| **Total** | **41/41** | **Pass** |
 
 Validation performed:
 - BSM put-call parity and IV inversion.

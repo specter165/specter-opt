@@ -32,6 +32,8 @@ class RiskConfig:
     require_earnings_calendar: bool = True
     # Correlated-exposure ceiling per cluster, as a fraction of equity.
     cluster_premium_cap_pct: float = 0.02
+    # Fallback cluster for symbols discovered by the screener.
+    default_cluster: str = "single_name"
     max_quote_age_seconds: float = 10.0
     exit_before_expiry_sessions: int = 1
     cvar_alpha: float = 0.95
@@ -98,6 +100,27 @@ class FeeConfig:
 
 
 @dataclass(frozen=True)
+class UniverseConfig:
+    """Screener-driven universe selection thresholds."""
+
+    max_symbols: int = 8
+    ttl_hours: float = 8.0
+    min_option_volume: int = 5_000
+    min_option_open_interest: int = 20_000
+    min_underlying_price: float = 10.0
+    max_underlying_price: float = 5_000.0
+    min_iv: float = 0.08
+    max_iv: float = 2.0
+    # Optional anchors always kept if they pass the filters (empty = fully dynamic).
+    always_include: List[str] = field(default_factory=list)
+    exclude: List[str] = field(default_factory=list)
+    # Composite score weights over standardised log(volume), log(OI) and IV.
+    weight_volume: float = 0.5
+    weight_open_interest: float = 0.3
+    weight_iv: float = 0.2
+
+
+@dataclass(frozen=True)
 class AgentConfig:
     """Top-level agent configuration."""
 
@@ -121,6 +144,7 @@ class AgentConfig:
         }
     )
     risk: RiskConfig = field(default_factory=RiskConfig)
+    universe_selection: UniverseConfig = field(default_factory=UniverseConfig)
     forecast: ForecastConfig = field(default_factory=ForecastConfig)
     pricing: PricingConfig = field(default_factory=PricingConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)

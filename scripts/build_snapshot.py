@@ -217,6 +217,7 @@ def main():
     parser.add_argument("--spy-quote", help="(legacy) quote_stock_quote JSON")
     parser.add_argument("--qqq-quote", help="(legacy) quote_stock_quote JSON")
     parser.add_argument("--earnings", help="JSON map {symbol: [YYYY-MM-DD, ...]} for earnings blackout")
+    parser.add_argument("--universe", help="data/universe.json from build_universe.py; restricts and orders the universe")
     parser.add_argument("--option-snapshot", help="quote_market_snapshot JSON for option contracts")
     parser.add_argument("--returns-cache", help="returns_cache JSON")
     parser.add_argument("--out", default="data/snapshot_live.json", help="Output path")
@@ -279,6 +280,21 @@ def main():
 
     if args.earnings:
         snapshot["earnings_dates"] = load_json(args.earnings)
+
+    if args.universe:
+        from specter_opt.universe import universe_symbols
+
+        requested = universe_symbols(load_json(args.universe))
+        usable, dropped = [], []
+        for sym in requested:
+            if sym in chains and sym in quotes_by_symbol:
+                usable.append(sym)
+            else:
+                dropped.append(sym)
+        if dropped:
+            print(f"WARNING: dropping universe symbols without chain/quote: {','.join(dropped)}")
+        snapshot["universe"] = usable
+        print(f"Universe: {','.join(usable) or '(empty)'}")
 
     if args.returns_cache:
         snapshot["returns_cache"] = load_json(args.returns_cache)

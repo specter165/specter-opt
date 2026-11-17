@@ -117,6 +117,7 @@ def main():
         config,
         broker,
         earnings_dates=snapshot.get("earnings_dates", {}),
+        universe=snapshot.get("universe"),
     )
     result = agent.run(returns_cache=returns_cache)
 
