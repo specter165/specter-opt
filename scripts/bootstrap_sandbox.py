@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 REPO_NAME = "specter-opt"
+DEFAULT_REMOTE = "https://github.com/specter165/specter-opt.git"
 SEARCH_PATHS = [
     "/data/specter-opt",
     "/mnt/specter-opt",
@@ -70,7 +71,11 @@ def pull_latest(repo_path: Path) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Bootstrap SPECTER-OPT repo")
-    parser.add_argument("--remote", default=os.getenv("SPECTER_GIT_REMOTE"), help="GitHub remote URL")
+    parser.add_argument(
+        "--remote",
+        default=os.getenv("SPECTER_GIT_REMOTE") or DEFAULT_REMOTE,
+        help="GitHub remote URL",
+    )
     parser.add_argument("--target", default="/data/specter-opt", help="Target clone path")
     parser.add_argument("--output", default="data/bootstrap_state.json", help="State output path")
     args = parser.parse_args()
