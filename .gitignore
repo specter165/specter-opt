@@ -1,0 +1,35 @@
+# Secrets and credentials
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Generated run data (large / point-in-time)
+data/mcp_*.json
+data/supervision_state.json
+data/snapshot_*.json
+data/run_result_*.json
+data/dashboard.html
+data/agent_runlog.jsonl
+data/agent_summary_*.json
+data/bootstrap_state.json
+data/option_batch_*.txt
+data/option_codes_to_snapshot.txt
+data/qqq_kline_*.json
+data/spy_kline_*.json
+data/returns_cache.json
+data/risk_state.json
+
+# Logs
+decision-logs/*.jsonl
+*.log
+
+# IDEs
+.vscode/
+.idea/

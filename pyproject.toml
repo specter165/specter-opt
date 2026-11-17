@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "specter-opt"
+version = "1.0.0"
+description = "SPECTER-OPT autonomous paper-trading agent for the Moomoo x Qoder AI Trading Agent Challenge"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.0",
+    "pytz>=2023.3",
+    "pandas-market-calendars>=4.3",
+    "python-dateutil>=2.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
