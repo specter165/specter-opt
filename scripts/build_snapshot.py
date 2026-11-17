@@ -121,6 +121,18 @@ def _to_float_or_none(value: Any) -> Optional[float]:
         return None
 
 
+def normalize_iv(value: Any) -> Optional[float]:
+    """Moomoo returns option IV in percent (23.65); the engine expects a decimal.
+
+    Values above 3.0 are treated as percent. Returns None for missing/zero so
+    the engine can fall back to IV inversion from the mid price.
+    """
+    iv = _to_float_or_none(value)
+    if iv is None or iv <= 0:
+        return None
+    return iv / 100.0 if iv > 3.0 else iv
+
+
 def parse_option_chain(chain_json: dict, underlying: str) -> List[dict]:
     rows = chain_json.get("data", {}).get("option_chain", [])
     out = []
@@ -155,7 +167,7 @@ def parse_stock_quote(quote_json: dict, code: str) -> dict:
                 "last": float(q.get("last_price", 0.0) or q.get("price", 0.0)),
                 "bid": float(q.get("bid_price", 0.0)),
                 "ask": float(q.get("ask_price", 0.0)),
-                "iv": float(q.get("option_ex_data", {}).get("implied_volatility", 0.0) or 0.0),
+                "iv": normalize_iv(q.get("option_ex_data", {}).get("implied_volatility")),
             }
     return {}
 
@@ -171,7 +183,7 @@ def merge_quotes(chain: List[dict], quote_map: Dict[str, dict]) -> List[dict]:
             c["ask_size"] = int(q.get("ask_size", 0) or c["ask_size"])
             c["open_interest"] = int(q.get("open_interest", 0) or c["open_interest"])
             c["volume"] = int(q.get("volume", 0) or c["volume"])
-            c["iv"] = q.get("iv") if q.get("iv") is not None else c["iv"]
+            c["iv"] = normalize_iv(q.get("iv")) if q.get("iv") is not None else c["iv"]
             for g in ("delta", "gamma", "theta", "vega"):
                 c[g] = q.get(g) if q.get(g) is not None else c[g]
             c["quote_age_seconds"] = float(q.get("quote_age_seconds", 0.0) or c["quote_age_seconds"])
@@ -192,7 +204,7 @@ def build_quote_map(snapshot_json: Optional[dict]) -> Dict[str, dict]:
             "ask_size": int(q.get("ask_vol", 0)),
             "open_interest": int(q.get("option_open_interest", 0) or q.get("open_interest", 0)),
             "volume": int(q.get("volume", 0)),
-            "iv": q.get("option_implied_volatility"),
+            "iv": normalize_iv(q.get("option_implied_volatility")),
             "delta": q.get("delta"),
             "gamma": q.get("gamma"),
             "theta": q.get("theta"),

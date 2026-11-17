@@ -68,6 +68,22 @@ def test_option_code_parsing_handles_four_char_tickers():
     assert mod._underlying_from_code("US.SPY") == "SPY"
 
 
+def test_iv_percent_is_normalised_to_decimal():
+    mod = _load_module("build_snapshot_iv_test", "scripts/build_snapshot.py")
+    # Moomoo reports option IV in percent; the engine expects a decimal.
+    assert mod.normalize_iv(23.65) == 0.2365
+    assert abs(mod.normalize_iv("27.7") - 0.277) < 1e-12
+    # Already-decimal values pass through unchanged.
+    assert mod.normalize_iv(0.24) == 0.24
+    assert mod.normalize_iv(0) is None
+    assert mod.normalize_iv(None) is None
+
+    quote_map = mod.build_quote_map(
+        {"data": {"snapshot_list": [{"code": "US.SPY260123C500000", "option_implied_volatility": 23.65}]}}
+    )
+    assert quote_map["US.SPY260123C500000"]["iv"] == 0.2365
+
+
 def test_single_names_get_stricter_liquidity_gates():
     cfg = AgentConfig()
     wide = _contract("NVDA", spread=0.04, oi=700)
