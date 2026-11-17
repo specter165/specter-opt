@@ -143,6 +143,11 @@ class SpecterAgent:
         min_oi = r.min_open_interest if is_index else r.single_name_min_open_interest
         next_earnings = None if is_index else self._next_earnings(underlying)
         q = self._div_yield(underlying)
+        # Calendar unavailable: we cannot prove the release falls outside the
+        # contract's life, so cap DTE instead of blocking the name outright.
+        max_dte = r.max_dte
+        if not is_index and r.earnings_blackout and next_earnings is None:
+            max_dte = min(max_dte, r.unknown_earnings_max_dte)
         filtered = []
         for c in contracts:
             if c.underlying != underlying:
@@ -153,7 +158,7 @@ class SpecterAgent:
                 dte = (expiry - ny_now().date()).days
             except Exception:
                 continue
-            if not (r.min_dte <= dte <= r.max_dte):
+            if not (r.min_dte <= dte <= max_dte):
                 continue
             # Never hold a contract across an earnings release.
             if r.earnings_blackout and next_earnings is not None and expiry >= next_earnings:
@@ -356,6 +361,22 @@ class SpecterAgent:
                     "SKIP_UNDERLYING", block_reason, {"underlying": u}
                 )
                 continue
+            if (
+                self.config.risk.earnings_blackout
+                and not is_index_symbol(u)
+                and self._next_earnings(u) is None
+            ):
+                self.decision_log.write(
+                    "EARNINGS_UNKNOWN",
+                    "calendar_unavailable_dte_capped",
+                    {
+                        "underlying": u,
+                        "max_dte": min(
+                            self.config.risk.max_dte,
+                            self.config.risk.unknown_earnings_max_dte,
+                        ),
+                    },
+                )
             filtered = self._filter_chain(chains.get(u, []), price, u)
             for c in filtered:
                 for h in self.config.forecast.horizons:

@@ -120,7 +120,8 @@ Cluster membership is multi-valued: a QQQ position consumes both the `index` and
 
 1. **Peak drawdown halt (5%)** — persisted; survives restart; requires explicit reset.
 2. **Daily loss block (2%)** — automatic, scoped to the session.
-3. **Missing earnings calendar** — single-name trading disabled entirely (fail closed).
+3. **Missing earnings calendar** — contract life capped at 10 DTE rather than the name
+   disabled; a known date inside the life still blocks the contract.
 4. **Stale or missing quotes** — no order is constructed from data older than 10s.
 5. **Broker/state disagreement** — reconciliation failure aborts the run before submit.
 6. **Order budget (20/day)** — hard stop on runaway loops.

@@ -7,7 +7,7 @@ Autonomous, risk-controlled options agent for the **Moomoo x Qoder AI Paper Trad
 - Universe: **screener-driven**, not a fixed list. Each morning `scripts/build_universe.py` aggregates Moomoo's `quote_option_screen` output by underlying (option volume, open interest, implied volatility), applies hard liquidity/price/IV filters, and ranks the survivors with a deterministic composite score. Default cap is 8 symbols; the selection is cached in `data/universe.json` for 8 hours so intraday scans reuse it instead of re-screening.
   - No symbol is hard-coded. `UniverseConfig.always_include` can anchor symbols (empty by default), and `config.universe` is only the offline/fallback list.
   - Screener-discovered symbols fall into the `single_name` cluster, so combined premium in unlisted names is still capped at 2% of equity.
-- Single names carry stricter liquidity gates (OI >= 1000, relative spread <= 3%) and an earnings blackout: no contract whose expiry spans the next earnings date, and no single-name trading at all if the earnings calendar is missing (fail closed).
+- Single names carry stricter liquidity gates (OI >= 1000, relative spread <= 3%) and an earnings blackout: no contract whose expiry spans a known earnings date. When no forward earnings date is available the contract life is capped at `unknown_earnings_max_dte` (10 days) instead of blocking the name; `require_earnings_calendar=True` restores the old fail-closed behaviour.
 - Correlated-exposure clusters cap combined premium: SPY/QQQ share `index`, QQQ/NVDA/AAPL share `megacap_tech`, so a QQQ position consumes both budgets.
 - Pricing: American binomial tree with BSM European reference.
 - Forecasting: EWMA + Student-t physical-measure scenarios (M0 zero-drift baseline).

@@ -29,9 +29,14 @@ class RiskConfig:
     # Stricter gates for single-name options: wider wings, thinner books.
     single_name_max_relative_spread: float = 0.03
     single_name_min_open_interest: int = 1000
-    # Never hold a contract whose life spans an earnings release.
+    # Never hold a contract whose life spans a KNOWN earnings release.
     earnings_blackout: bool = True
-    require_earnings_calendar: bool = True
+    # Moomoo exposes no forward earnings dates, so failing closed on a missing
+    # calendar blocked every single name permanently. Trade the name instead,
+    # but keep the contract short-dated so an unannounced release cannot sit
+    # inside its life for long.
+    require_earnings_calendar: bool = False
+    unknown_earnings_max_dte: int = 10
     # Correlated-exposure ceiling per cluster, as a fraction of equity.
     cluster_premium_cap_pct: float = 0.02
     # Fallback cluster for symbols discovered by the screener.

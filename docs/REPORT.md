@@ -99,7 +99,7 @@ Executed every 30 minutes during US hours.
 | With positive robust edge | **0** |
 | Best candidate | IWM 261127 272P, Δ −0.56, EV **−$87.71** |
 | Decision | **HOLD** — no intents, no orders |
-| Blocked by earnings gate | NVDA, IBIT, INTC, MSTR, SPCX (`missing_earnings_calendar`) |
+| Blocked by earnings gate | NVDA, IBIT, INTC, MSTR, SPCX (`missing_earnings_calendar`) — since relaxed |
 
 This run used **real 60-day EWMA volatilities** built from daily K-lines
 (`scripts/build_returns_cache.py` → `data/runs/returns_cache.json`). An earlier run
@@ -119,10 +119,18 @@ With proper inputs the result is now a genuine judgement:
 On every tradeable index name the market's implied vol sits above realised, so a
 long-premium book is paying up for movement it is not being handed — the variance risk
 premium working against a buyer. INTC is the one name where realised exceeds implied
-(RV − IV = −36 vol points), i.e. the only place today the thesis would fire, but it is
-blocked by the fail-closed earnings gate because no forward earnings date is available
-for it. So the agent correctly declines rather than guessing through an unverified
-earnings date. **This is the intended output.**
+(RV − IV = −36 vol points), i.e. the only place today the thesis would fire, but at the
+time it was blocked by the fail-closed earnings gate because no forward earnings date is
+available for it.
+
+**Since relaxed.** Moomoo exposes no forward earnings dates at all
+(`quote_economic_calendar_search` returns only released events), so failing closed meant
+no single name could ever be traded. `require_earnings_calendar` now defaults to `False`:
+an unknown release date no longer blocks the name, but contracts on such names are capped
+at `unknown_earnings_max_dte = 10` days so an unannounced release cannot sit deep inside
+the holding period. Known dates still black out normally, and
+`require_earnings_calendar=True` restores the old behaviour if needed. Each relaxed
+underlying is logged as `EARNINGS_UNKNOWN / calendar_unavailable_dte_capped`.
 
 ### Operational history
 
@@ -150,10 +158,10 @@ See `docs/THESIS.md` §4 for the full table. Summary:
 
 ## 6. What we would build next
 
-1. **Earnings calendar ingestion.** Two-thirds of the screened universe is currently
-   blocked by the fail-closed earnings gate. The fix is a validated dates cache, not a
-   guess: last report date from the broker plus a widened ±7-day blackout window, so
-   the gate can narrow without ever failing open.
+1. **Earnings calendar ingestion.** The gate now allows a name with no known date but
+   caps its contract life at 10 DTE, which is a holding-period proxy for event risk. The
+   real fix is a validated dates cache — last report date from the broker plus a widened
+   ±7-day blackout window — so the cap can lift without ever failing open.
 2. **Short premium, cash-secured puts only.** The variance risk premium sits on the
    selling side; long premium is the hard half of the trade. Requires a collateral-based
    risk budget instead of a premium-based one.

@@ -114,15 +114,29 @@ def test_earnings_blackout_drops_contracts_spanning_earnings(tmp_path):
     assert agent._filter_chain([before], 100.0, "NVDA") != []
 
 
-def test_missing_earnings_calendar_fails_closed(tmp_path):
+def test_missing_earnings_calendar_caps_dte_instead_of_blocking(tmp_path):
     agent = _agent(tmp_path, earnings_dates={})
-    blocked, reason = agent._earnings_blocked("NVDA")
-    assert blocked is True
-    assert reason == "missing_earnings_calendar"
+    # Moomoo has no forward earnings dates; refusing the name forever meant
+    # never trading a single stock at all.
+    assert agent._earnings_blocked("NVDA") == (False, "")
     assert agent._earnings_blocked("SPY") == (False, "")
-    # With a calendar present the symbol is allowed again.
+    # The risk is bounded by holding period: long-dated contracts are dropped.
+    assert agent._filter_chain([_contract("NVDA", dte=14)], 100.0, "NVDA") == []
+    assert agent._filter_chain([_contract("NVDA", dte=7)], 100.0, "NVDA") != []
+    # Index products are unaffected either way.
+    assert agent._filter_chain([_contract("SPY", dte=14)], 100.0, "SPY") != []
+
+
+def test_fail_closed_mode_is_still_available(tmp_path):
+    cfg = replace(
+        AgentConfig(mode="shadow"),
+        risk=replace(AgentConfig().risk, require_earnings_calendar=True),
+    )
+    agent = _agent(tmp_path, earnings_dates={}, cfg=cfg)
+    assert agent._earnings_blocked("NVDA") == (True, "missing_earnings_calendar")
+    assert agent._earnings_blocked("SPY") == (False, "")
     future = (date.today() + timedelta(days=40)).isoformat()
-    agent2 = _agent(tmp_path, earnings_dates={"AAPL": [future]})
+    agent2 = _agent(tmp_path, earnings_dates={"AAPL": [future]}, cfg=cfg)
     assert agent2._earnings_blocked("AAPL") == (False, "")
 
 
