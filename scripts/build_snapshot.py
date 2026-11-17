@@ -58,18 +58,25 @@ def parse_account(cash_info: dict, account_list_entry: dict) -> dict:
 
 
 def parse_positions(positions_json: dict) -> List[dict]:
-    """Normalize sim_trade_position_list output."""
+    """Normalize sim_trade_position_list output.
+
+    The paper API keeps CLOSED rows with qty "0". Those are not holdings and
+    must not count toward max_concurrent_positions, so drop them here.
+    """
     rows = positions_json.get("data", {}).get("positions", [])
     out = []
     for p in rows:
         # Position list schema varies by market; normalize best-effort.
+        quantity = int(p.get("qty", p.get("quantity", 0)) or 0)
+        if quantity <= 0:
+            continue
         out.append({
             "symbol": p.get("code", p.get("symbol", "")),
             "underlying": _underlying_from_code(p.get("code", p.get("symbol", ""))),
             "right": p.get("right", ""),
             "strike": float(p.get("strike", 0.0) or 0.0),
             "expiry": p.get("expiry", ""),
-            "quantity": int(p.get("qty", p.get("quantity", 0)) or 0),
+            "quantity": quantity,
             "entry_price": float(p.get("cost_price", p.get("entry_price", 0.0)) or 0.0),
             "multiplier": int(p.get("multiplier", 100) or 100),
             "market_price": float(p.get("nominal_price", p.get("market_price", 0.0)) or 0.0),
@@ -79,25 +86,41 @@ def parse_positions(positions_json: dict) -> List[dict]:
     return out
 
 
+_ORDER_STATUS = {
+    1: "NEW", 2: "SUBMITTED", 3: "PARTIAL_FILLED", 4: "FILLED",
+    5: "CANCELLED", 6: "REJECTED", 7: "EXPIRED",
+}
+_LIVE_ORDER_STATUSES = ("NEW", "SUBMITTED", "PARTIAL_FILLED", "PENDING_NEW")
+
+
 def parse_orders(orders_json: Optional[dict]) -> List[dict]:
     if not orders_json:
         return []
     rows = orders_json.get("data", {}).get("orders", [])
     out = []
     for o in rows:
-        status = o.get("order_status", o.get("status", "UNKNOWN"))
-        if status not in ("NEW", "PARTIAL_FILLED", "PENDING_NEW"):
+        raw_status = o.get("order_status", o.get("status", "UNKNOWN"))
+        # sim_trade_* returns numeric statuses; history/mock use strings.
+        if isinstance(raw_status, int):
+            status = _ORDER_STATUS.get(raw_status, str(raw_status))
+        else:
+            status = str(raw_status).upper()
+        if status not in _LIVE_ORDER_STATUSES:
+            continue
+        quantity = int(o.get("qty", o.get("quantity", 0)) or 0)
+        filled = int(o.get("dealt_qty", o.get("filled_qty", 0)) or 0)
+        if quantity <= 0 or filled >= quantity:
             continue
         out.append({
             "order_id": o.get("order_id", o.get("id", "")),
             "intent_id": "",
             "symbol": o.get("code", o.get("symbol", "")),
-            "side": o.get("order_side", o.get("side", "")).upper(),
-            "quantity": int(o.get("qty", o.get("quantity", 0)) or 0),
+            "side": str(o.get("order_side", o.get("side", ""))).upper(),
+            "quantity": quantity,
             "price": _to_float_or_none(o.get("price")),
-            "order_type": o.get("order_type", "LIMIT").upper(),
+            "order_type": str(o.get("order_type", "LIMIT")).upper(),
             "status": status,
-            "filled_qty": int(o.get("dealt_qty", o.get("filled_qty", 0)) or 0),
+            "filled_qty": filled,
             "avg_fill_price": _to_float_or_none(o.get("dealt_avg_price", o.get("avg_fill_price"))),
         })
     return out
