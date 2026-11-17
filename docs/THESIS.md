@@ -74,10 +74,10 @@ these, observed over a live sample, is grounds to stop and revise — not to tun
 | # | Invalidation | Measurement | Threshold |
 |---|---|---|---|
 | I1 | **Edge is imaginary** | Realised net P&L on executed trades | ≤ 0 over ≥ 30 trades |
-| I2 | **Wrong shape** | Hit rate and average win/loss ratio | hit rate high but win/loss < 1.2, or profit concentrated in ≤ 2 trades |
-| I3 | **Variance premium is against us** | Implied minus subsequently realised vol in the selected universe | negative on average over ≥ 20 sessions |
+| I2 | **No convexity** | Realised net P&L distribution | largest single winner < 3× its entry premium over ≥ 30 trades — the fat-tail payoff the thesis requires never arrives (profit concentration itself is *expected*, not a failure) |
+| I3 | **Variance premium is against us** | Implied minus subsequently realised vol in the selected universe | **positive** on average over ≥ 20 sessions — we are systematically paying more than is realised, the adverse state for a long-premium book |
 | I4 | **Selection adds nothing** | Realised P&L of *rejected* candidates vs accepted | rejected outperform accepted |
-| I5 | **Only catalysts** | Share of candidates whose expiry spans an event | > 50% — then we are buying event lottery tickets, not dispersion |
+| I5 | **Single-event concentration** | Share of aggregate open premium in contracts expiring inside the same event window | > 60% — the book is one binary catalyst bet, not dispersion (event clustering is an edge *source*, but concentration is a risk) |
 | I6 | **Fills destroy the edge** | Slippage vs decision mid | > 1.5% of premium on > 30% of fills |
 | I7 | **Model mis-specification** | IV unit/scale sanity; implied vol vs tree-implied vol round-trip | round-trip error > 50 bps without explanation |
 
@@ -96,7 +96,7 @@ All limits are enforced in `src/specter_opt/risk.py` and persisted in
 | Control | Value | Notes |
 |---|---|---|
 | Premium per trade | 0.5% equity ($500) | includes entry cost and fees |
-| Aggregate open premium | 3% equity ($3,000) | across all positions |
+| Aggregate open premium | 1.2% equity ($1,200) | binds before three full-size positions (3 × 0.5% = 1.5%) |
 | Correlated cluster | 2% equity ($2,000) | `index` = {SPY, QQQ}; `megacap_tech` = {QQQ, NVDA, AAPL}; screener names → `single_name` |
 | Concurrent positions | 3 | |
 | Orders per US trading day | 20 | |

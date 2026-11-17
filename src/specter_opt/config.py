@@ -10,7 +10,9 @@ class RiskConfig:
     """Internal risk ceilings; official competition rules may be stricter."""
 
     per_trade_premium_pct: float = 0.005
-    aggregate_premium_pct: float = 0.03
+    # 1.2% binds before three full-size (0.5%) positions stack to 1.5%;
+    # a 3% cap could never bind and was therefore dead config.
+    aggregate_premium_pct: float = 0.012
     max_concurrent_positions: int = 3
     daily_equity_loss_block_pct: float = 0.02
     peak_drawdown_halt_pct: float = 0.05

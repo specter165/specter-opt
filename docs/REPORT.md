@@ -95,17 +95,34 @@ Executed every 30 minutes during US hours.
 | Screener candidates | 23 underlyings → 114 excluded on hard filters |
 | Universe | SPY, NVDA, QQQ, IWM, IBIT, INTC, MSTR, SPCX |
 | Contracts in band (7–21 DTE, \|Δ\| 0.35–0.70) | 644 |
-| Passing hard filters | 155 (150 in the interactive run) |
+| Screened candidates evaluated | 147 (SPY 51, QQQ 54, IWM 42) |
 | With positive robust edge | **0** |
-| Best candidate | IWM 261127 275P, Δ −0.66, EV **−$194.98** |
+| Best candidate | IWM 261127 272P, Δ −0.56, EV **−$87.71** |
 | Decision | **HOLD** — no intents, no orders |
 | Blocked by earnings gate | NVDA, IBIT, INTC, MSTR, SPCX (`missing_earnings_calendar`) |
 
-The system evaluated 150+ contracts and bought none, because the best one on the board
-was still ~$195 too expensive relative to its modelled value. **This is the intended
-output, not a failure.** With a zero-drift baseline there is no directional view to pay
-theta for; the only reason to own premium is dispersion, and today the market was not
-offering it.
+This run used **real 60-day EWMA volatilities** built from daily K-lines
+(`scripts/build_returns_cache.py` → `data/runs/returns_cache.json`). An earlier run
+without a returns cache defaulted volatility to zero, which priced every long option at
+intrinsic and produced a spurious EV of ≈ −premium for everything; that run's HOLD was
+an input artefact, not a market verdict, and is superseded by this one.
+
+With proper inputs the result is now a genuine judgement:
+
+| Underlying | EWMA realised vol (ann.) | Implied vol | IV − RV |
+|---|---|---|---|
+| SPY | 20.8% | 26.0% | +5.3 |
+| QQQ | 32.3% | 35.2% | +2.8 |
+| IWM | 23.5% | 28.0% | +4.5 |
+| INTC | 119.1% | 83.0% | **−36.1** |
+
+On every tradeable index name the market's implied vol sits above realised, so a
+long-premium book is paying up for movement it is not being handed — the variance risk
+premium working against a buyer. INTC is the one name where realised exceeds implied
+(RV − IV = −36 vol points), i.e. the only place today the thesis would fire, but it is
+blocked by the fail-closed earnings gate because no forward earnings date is available
+for it. So the agent correctly declines rather than guessing through an unverified
+earnings date. **This is the intended output.**
 
 ### Operational history
 

@@ -43,7 +43,11 @@ class RiskGuard:
     def __init__(self, config: AgentConfig, state_file: Optional[str] = None):
         self.risk = config.risk
         self.fees = config.fees
-        self.state_file = state_file or config.execution.state_file
+        self.state_file = (
+            state_file
+            or os.getenv("SPECTER_RISK_STATE")
+            or config.execution.state_file
+        )
         self.state = self._load_state()
 
     def _load_state(self) -> RiskState:

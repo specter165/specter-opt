@@ -387,7 +387,21 @@ class SpecterAgent:
 
         # 8. Select top candidate under limits
         selected: Optional[Candidate] = None
-        for cand in ranked:
+        live_positions = len(positions) + len(open_orders)
+        max_positions = self.config.risk.max_concurrent_positions
+        if live_positions >= max_positions:
+            result.rejection_reasons.append(
+                f"max_concurrent_positions:{live_positions}/{max_positions}"
+            )
+            self.decision_log.write(
+                "HOLD",
+                "max_concurrent_positions",
+                {"live": live_positions, "max": max_positions},
+            )
+            ranked_for_entry: List[Candidate] = []
+        else:
+            ranked_for_entry = ranked
+        for cand in ranked_for_entry:
             qty = size_candidate(
                 cand,
                 equity,
