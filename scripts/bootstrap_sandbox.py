@@ -16,6 +16,7 @@ Exit codes:
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -56,17 +57,29 @@ def clone_repo(remote: str, target: Path) -> bool:
 
 
 def pull_latest(repo_path: Path) -> bool:
-    try:
-        result = subprocess.run(
-            ["git", "pull"],
-            cwd=str(repo_path),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+    """Fast-forward to origin without failing on divergent local branches.
+
+    A reused sandbox can accumulate local commits; ``git pull`` then aborts.
+    Fetch + hard reset always lands on the remote tip and leaves *untracked*
+    runtime files (data/.credits.env etc.) untouched.
+    """
+    for cmd in (
+        ["git", "fetch", "--depth", "1", "origin", "main"],
+        ["git", "reset", "--hard", "FETCH_HEAD"],
+    ):
+        try:
+            result = subprocess.run(
+                cmd, cwd=str(repo_path), capture_output=True, text=True, timeout=60
+            )
+            if result.returncode != 0:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def state_dir() -> Path:
+    return Path(os.getenv("SPECTER_STATE_DIR") or "/data/.specter_state")
 
 
 def main():
@@ -92,6 +105,13 @@ def main():
     if repo:
         for sub in ("data", "data/chains", "data/quotes", "decision-logs"):
             (repo / sub).mkdir(parents=True, exist_ok=True)
+        sd = state_dir()
+        sd.mkdir(parents=True, exist_ok=True)
+        legacy = repo / "data" / "risk_state.json"
+        target = sd / "risk_state.json"
+        if legacy.exists() and not target.exists():
+            shutil.copy2(legacy, target)
+        state["state_dir"] = str(sd)
         state["pulled"] = pull_latest(repo)
     elif args.remote:
         target = Path(args.target)

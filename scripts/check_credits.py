@@ -23,6 +23,10 @@ DEFAULT_THRESHOLD = 100
 def load_credits(path: str) -> float:
     p = Path(path)
     if not p.exists():
+        # Sandboxes have no persistent .credits.env; allow a supplied secret.
+        env_val = os.environ.get("CREDITS_REMAINING")
+        if env_val is not None and env_val.strip() != "":
+            return float(env_val.strip())
         raise FileNotFoundError(f"Credits env file not found: {path}")
     with open(p, "r") as f:
         for line in f:

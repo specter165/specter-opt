@@ -37,6 +37,21 @@ class RiskState:
         return cls(**d)
 
 
+def _default_state_path(config: AgentConfig) -> str:
+    """Resolve a state file that survives a repo re-clone.
+
+    Scheduled runs reuse a sandbox but re-clone the repo, which wipes any
+    state stored under the repo's data/ tree. When SPECTER_STATE_DIR is set,
+    or the conventional external dir exists, keep risk state there instead.
+    """
+    state_dir = os.getenv("SPECTER_STATE_DIR")
+    if not state_dir and os.path.isdir("/data/.specter_state"):
+        state_dir = "/data/.specter_state"
+    if state_dir:
+        return os.path.join(state_dir, "risk_state.json")
+    return config.execution.state_file
+
+
 class RiskGuard:
     """Deterministic risk gate."""
 
@@ -46,7 +61,7 @@ class RiskGuard:
         self.state_file = (
             state_file
             or os.getenv("SPECTER_RISK_STATE")
-            or config.execution.state_file
+            or _default_state_path(config)
         )
         self.state = self._load_state()
 
