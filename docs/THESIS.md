@@ -54,12 +54,17 @@ window is small. Flat is a valid, intended output.**
    top 8, cached 8 hours.
 2. **Contract filters.** 7–21 DTE; |delta| 0.35–0.70; single names need OI ≥ 1,000 and
    relative spread ≤ 3% (index: OI ≥ 500, spread ≤ 5%); quote age ≤ 10s.
-3. **Earnings blackout.** No contract whose life spans the next earnings date. If the
-   calendar is missing, no single-name trading at all — fail closed.
+3. **Earnings blackout.** No contract whose life spans a *known* next earnings date. The
+   paper feed exposes no forward earnings dates, so a name whose calendar is empty is
+   traded only via contracts with ≤ 10 DTE — too short for an unannounced release to sit
+   inside the contract's life for long. Set `require_earnings_calendar=True` to restore
+   the old fail-closed behaviour.
 4. **Edge test.** EWMA variance (λ=0.94) + Student-t (ν=5) scenarios, 5,000 paths,
-   fixed seed. Price with a CRR American tree, 5 steps/day, continuous dividend yield.
-   `robust_edge = E[net P&L] − 1.0 × (CVaR95 shortfall dispersion)`. Trade only if
-   `robust_edge > 0` **and** composite score > 0.
+   fixed seed, zero-drift baseline. Price with a CRR American tree, 5 steps/day,
+   continuous dividend yield. `robust_edge = E[net P&L] − U` with the model-uncertainty
+   term `U = 0` in the M0 baseline, and composite score
+   `(E[net P&L] − 0.1 × CVaR95) / premium at risk`. Trade only if `robust_edge > 0`
+   **and** score > threshold.
 5. **Sizing.** Integer contracts priced against the premium budget, never rounded up.
 6. **Execution.** Limit only. Persisted intents, duplicate prevention, reconciliation
    against broker state before and after submission.
@@ -101,7 +106,7 @@ All limits are enforced in `src/specter_opt/risk.py` and persisted in
 | Concurrent positions | 3 | |
 | Orders per US trading day | 20 | |
 | Structure | long single-leg only | no spreads, no naked, no borrowing, no uncovered |
-| Earnings | no contract spanning earnings | fail closed without calendar |
+| Earnings | no contract spanning a known earnings date; ≤ 10 DTE when the calendar is empty | DTE cap rather than block |
 | Quote freshness | ≤ 10 seconds | stale data → no entry |
 
 Cluster membership is multi-valued: a QQQ position consumes both the `index` and

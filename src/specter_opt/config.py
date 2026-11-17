@@ -46,7 +46,11 @@ class RiskConfig:
     max_quote_age_seconds: float = 10.0
     exit_before_expiry_sessions: int = 1
     cvar_alpha: float = 0.95
-    lambda_risk: float = 1.0
+    # score = (EV - lambda_risk * CVaR95) / premium. For a long option CVaR95 is
+    # close to the whole premium, so lambda=1.0 demanded EV > ~100% of premium
+    # and was unsatisfiable by construction. 0.1 still requires the expected
+    # edge to clear a tenth of the tail loss before a position is opened.
+    lambda_risk: float = 0.1
     min_score_threshold: float = 0.0
     max_premium_stop_pct: float = 0.30
 
