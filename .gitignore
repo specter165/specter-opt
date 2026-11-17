@@ -35,3 +35,6 @@ decision-logs/*.jsonl
 .idea/
 data/earnings_dates.json
 data/universe.json
+
+# Interactive run scratch
+data/runs/
