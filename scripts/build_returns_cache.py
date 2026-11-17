@@ -40,7 +40,11 @@ def _closes_to_log_returns(closes: List[float]) -> List[float]:
 def build_cache(kline_paths: Dict[str, str]) -> Dict[str, List[float]]:
     cache: Dict[str, List[float]] = {}
     for symbol, path in kline_paths.items():
-        closes = [bar["close"] for bar in _parse_kline(path)]
+        # quote_cur_kline returns "close_price"; older exports used "close".
+        closes = [
+            float(bar.get("close_price", bar.get("close", 0.0)))
+            for bar in _parse_kline(path)
+        ]
         cache[symbol.upper()] = _closes_to_log_returns(closes)
     return cache
 

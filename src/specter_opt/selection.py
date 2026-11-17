@@ -1,11 +1,13 @@
 """Contract screening, scenario repricing, robust-edge/CVaR ranking and sizing."""
 
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 
 from specter_opt.broker import OptionContract
+from specter_opt.calendar import ny_now
 from specter_opt.config import AgentConfig, is_index_symbol
 from specter_opt.fees import option_fees, round_lot_quantity
 from specter_opt.forecasting import ScenarioSet
@@ -31,6 +33,21 @@ class Candidate:
 
 def _days_to_years(dte: int) -> float:
     return max(dte, 0) / 365.0
+
+
+def _dte(contract: OptionContract) -> int:
+    """Calendar days to expiry.
+
+    The exit leg is repriced at ``now + horizon``, so the starting tenor must be
+    the contract's own remaining life. Using the horizon instead valued every
+    exit at expiry (zero time value) and made every long premium trade look
+    catastrophic.
+    """
+    try:
+        expiry = date.fromisoformat(contract.expiry)
+    except (TypeError, ValueError):
+        return 0
+    return max((expiry - ny_now().date()).days, 0)
 
 
 def screen_contract(contract: OptionContract, config: AgentConfig) -> List[str]:
@@ -69,7 +86,7 @@ def evaluate_candidate(
     multiplier = contract.multiplier
     entry_ask = contract.ask
 
-    tau_entry = _days_to_years(horizon)
+    tau_entry = _days_to_years(_dte(contract))
     tau_exit = max(0.0, tau_entry - horizon / 365.0)
 
     exit_bids = np.empty(len(scenarios.spots))
