@@ -279,7 +279,11 @@ def main():
     }
 
     if args.earnings:
-        snapshot["earnings_dates"] = load_json(args.earnings)
+        try:
+            snapshot["earnings_dates"] = load_json(args.earnings)
+        except Exception:
+            # Fail closed downstream: single names without a calendar are skipped.
+            print(f"WARNING: could not read earnings calendar {args.earnings}; single names will be skipped")
 
     if args.universe:
         from specter_opt.universe import universe_symbols
@@ -297,7 +301,10 @@ def main():
         print(f"Universe: {','.join(usable) or '(empty)'}")
 
     if args.returns_cache:
-        snapshot["returns_cache"] = load_json(args.returns_cache)
+        try:
+            snapshot["returns_cache"] = load_json(args.returns_cache)
+        except Exception:
+            print(f"WARNING: could not read returns cache {args.returns_cache}; using zero-drift fallback")
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w") as f:
