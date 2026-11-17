@@ -90,6 +90,8 @@ def main():
     }
 
     if repo:
+        for sub in ("data", "data/chains", "data/quotes", "decision-logs"):
+            (repo / sub).mkdir(parents=True, exist_ok=True)
         state["pulled"] = pull_latest(repo)
     elif args.remote:
         target = Path(args.target)
