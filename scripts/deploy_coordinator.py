@@ -25,8 +25,15 @@ API = "https://api.qoder.com/api/v1/cloud"
 # Hard-coded after first creation. Change these if you recreate.
 DEFAULT_COORDINATOR_ID = "agent_00vtx968cg001u7ae5oi"
 DEFAULT_ENV_ID = "env_00vril0nfsgzldpyxwfm"
-DEFAULT_DEPLOYMENT_NAME = "SPECTER-OPT Trading Cycle"
-DEFAULT_CRON = "*/30 10-15 * * 1-5"
+
+TRADING_DEPLOYMENT_NAME = "SPECTER-OPT Trading Cycle"
+TRADING_CRON = "*/30 10-15 * * 1-5"
+TRADING_MESSAGE = "Run the trading cycle without reporting."
+
+EOD_DEPLOYMENT_NAME = "SPECTER-OPT EOD Report"
+EOD_CRON = "15 16 * * 1-5"
+EOD_MESSAGE = "Run the EOD report only."
+
 DEFAULT_TZ = "America/New_York"
 
 
@@ -51,7 +58,7 @@ def call(method: str, path: str, body: Optional[Dict[str, Any]] = None) -> Dict[
         return json.loads(resp.read().decode())
 
 
-def find_deployment() -> Optional[str]:
+def find_deployment(name: str) -> Optional[str]:
     page = ""
     while True:
         url = "/deployments?limit=50"
@@ -59,7 +66,7 @@ def find_deployment() -> Optional[str]:
             url += f"&page={page}"
         data = call("GET", url)
         for dep in data.get("data", []):
-            if dep.get("name") == DEFAULT_DEPLOYMENT_NAME:
+            if dep.get("name") == name:
                 return dep["id"]
         if not data.get("has_more"):
             break
@@ -67,77 +74,97 @@ def find_deployment() -> Optional[str]:
     return None
 
 
-def create() -> None:
-    existing = find_deployment()
+def create_one(name: str, cron: str, message: str) -> Optional[str]:
+    existing = find_deployment(name)
     if existing:
-        print(f"Deployment already exists: {existing}")
-        print("Run `python scripts/deploy_coordinator.py status` to view it.")
-        return
+        print(f"Deployment already exists: {existing} ({name})")
+        return existing
 
     body = {
-        "name": DEFAULT_DEPLOYMENT_NAME,
+        "name": name,
         "agent": DEFAULT_COORDINATOR_ID,
         "environment_id": DEFAULT_ENV_ID,
         "schedule": {
             "type": "cron",
-            "expression": DEFAULT_CRON,
+            "expression": cron,
             "timezone": DEFAULT_TZ,
         },
         "initial_events": [
             {
                 "type": "user.message",
-                "content": [{"type": "text", "text": "Run the next trading cycle."}],
+                "content": [{"type": "text", "text": message}],
             }
         ],
     }
     dep = call("POST", "/deployments", body)
-    print(f"Created deployment: {dep['id']}")
+    print(f"Created deployment: {dep['id']} ({name})")
     print(f"Status: {dep['status']}")
     print(f"Next runs: {dep.get('schedule', {}).get('upcoming_runs_at', [])}")
+    return dep["id"]
+
+
+def create() -> None:
+    create_one(TRADING_DEPLOYMENT_NAME, TRADING_CRON, TRADING_MESSAGE)
+    create_one(EOD_DEPLOYMENT_NAME, EOD_CRON, EOD_MESSAGE)
 
 
 def status(dep_id: Optional[str] = None) -> None:
-    if dep_id is None:
-        dep_id = find_deployment()
-    if not dep_id:
-        print("No deployment found. Run `create` first.")
-        return
-    dep = call("GET", f"/deployments/{dep_id}")
-    print(json.dumps(dep, indent=2))
+    if dep_id:
+        deps = [call("GET", f"/deployments/{dep_id}")]
+    else:
+        deps = []
+        for name in (TRADING_DEPLOYMENT_NAME, EOD_DEPLOYMENT_NAME):
+            dep_id = find_deployment(name)
+            if dep_id:
+                deps.append(call("GET", f"/deployments/{dep_id}"))
+            else:
+                print(f"No deployment found for {name}")
+    for dep in deps:
+        print(json.dumps(dep, indent=2))
 
 
 def run_now(dep_id: Optional[str] = None) -> None:
-    if dep_id is None:
-        dep_id = find_deployment()
-    if not dep_id:
-        print("No deployment found. Run `create` first.")
+    if dep_id:
+        result = call("POST", f"/deployments/{dep_id}/run")
+        print(f"Triggered run: {result.get('id', result)}")
         return
-    result = call("POST", f"/deployments/{dep_id}/run")
-    print(f"Triggered run: {result.get('id', result)}")
+    for name in (TRADING_DEPLOYMENT_NAME, EOD_DEPLOYMENT_NAME):
+        dep_id = find_deployment(name)
+        if dep_id:
+            result = call("POST", f"/deployments/{dep_id}/run")
+            print(f"Triggered run for {name}: {result.get('id', result)}")
+        else:
+            print(f"No deployment found for {name}")
+
+
+def _apply_all(op: str) -> None:
+    for name in (TRADING_DEPLOYMENT_NAME, EOD_DEPLOYMENT_NAME):
+        dep_id = find_deployment(name)
+        if dep_id:
+            call("POST", f"/deployments/{dep_id}/{op}")
+            print(f"{op.capitalize()}d {dep_id} ({name})")
+        else:
+            print(f"No deployment found for {name}")
 
 
 def pause(dep_id: Optional[str] = None) -> None:
-    if dep_id is None:
-        dep_id = find_deployment()
-    if not dep_id:
-        print("No deployment found.")
+    if dep_id:
+        call("POST", f"/deployments/{dep_id}/pause")
+        print(f"Paused {dep_id}")
         return
-    call("POST", f"/deployments/{dep_id}/pause")
-    print(f"Paused {dep_id}")
+    _apply_all("pause")
 
 
 def unpause(dep_id: Optional[str] = None) -> None:
-    if dep_id is None:
-        dep_id = find_deployment()
-    if not dep_id:
-        print("No deployment found.")
+    if dep_id:
+        call("POST", f"/deployments/{dep_id}/unpause")
+        print(f"Unpaused {dep_id}")
         return
-    call("POST", f"/deployments/{dep_id}/unpause")
-    print(f"Unpaused {dep_id}")
+    _apply_all("unpause")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Manage SPECTER-OPT Coordinator deployment")
+    parser = argparse.ArgumentParser(description="Manage SPECTER-OPT Coordinator deployments")
     parser.add_argument("command", choices=["create", "status", "run", "pause", "unpause"])
     parser.add_argument("--deployment-id", help="Override deployment ID")
     args = parser.parse_args()
