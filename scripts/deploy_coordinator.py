@@ -24,7 +24,7 @@ API = "https://api.qoder.com/api/v1/cloud"
 
 # Hard-coded after first creation. Change these if you recreate.
 DEFAULT_COORDINATOR_ID = "agent_00vtx968cg001u7ae5oi"
-DEFAULT_COORDINATOR_VERSION = 7
+DEFAULT_COORDINATOR_VERSION = 8
 DEFAULT_ENV_ID = "env_00vril0nfsgzldpyxwfm"
 DEFAULT_VAULT_IDS = [
     "vault_00vtyrlil9hxd3nbej0l",  # moomoo agents
