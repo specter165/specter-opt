@@ -55,21 +55,24 @@ class ExecutionAgent(Agent):
             return AgentResult(agent_name=self.name, success=True, output=output)
 
         pending = context.data.get("pending_intents") or self._load_jsonl(context.pending_orders_path)
-        if not pending:
-            output["note"] = "No pending intents"
-            context.add_event("Execution: no pending intents")
+        exits = context.data.get("exit_intents") or []
+        all_intents = (pending or []) + (exits or [])
+        if not all_intents:
+            output["note"] = "No pending intents or exits"
+            context.add_event("Execution: no pending intents or exits")
             return AgentResult(agent_name=self.name, success=True, output=output)
 
         # This agent is deterministic scaffolding. Actual MCP submission must be done by
         # the assistant because scripts cannot call MCP tools directly. We record which
         # intents would be submitted and leave them in the pending file for the assistant.
-        for intent in pending:
+        for intent in all_intents:
             symbol = intent.get("symbol")
             if not symbol:
                 output["skipped"].append({"intent": intent, "reason": "missing symbol"})
                 continue
             output["submitted"].append(intent)
-            context.add_event(f"Execution: ready to submit {symbol} qty={intent.get('quantity')} @ {intent.get('price')}")
+            side = intent.get("side", 1)
+            context.add_event(f"Execution: ready to submit {symbol} side={side} qty={intent.get('quantity')} @ {intent.get('price')}")
 
         if output["submitted"]:
             self._archive_pending(context, output["submitted"])

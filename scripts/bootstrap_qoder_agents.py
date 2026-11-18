@@ -71,6 +71,11 @@ CHILDREN = [
         "description": "Gather account state, positions, and open orders",
     },
     {
+        "key": "supervision",
+        "name": "Supervision",
+        "description": "Monitor open positions for stop-loss and expiry exits",
+    },
+    {
         "key": "strategy",
         "name": "Strategy",
         "description": "Price universe and emit order intents",
@@ -96,18 +101,29 @@ COORDINATOR_SYSTEM = """You are the SPECTER-OPT Coordinator. You run the paper-t
 
 Child roster:
 - research: refresh account state, positions, open orders
+- supervision: monitor open positions for 30% stop-loss or expiry within 1 day
 - strategy: price the universe and emit order intents
 - risk: confirm no halt / limit breach
-- execution: archive pending intents so they can be submitted
+- execution: archive pending intents and exit intents so they can be submitted
 - reporting: post Slack summary
 
 Trading cycle:
-1. Send research a message: "Run the research agent and report equity, positions, and open orders."
-2. If no halt and the book has room, send strategy: "Run the strategy agent and report the top candidate and any pending intents."
-3. Send risk: "Run the risk agent and confirm whether trading is allowed."
-4. If pending intents exist and risk is green, send execution: "Run the execution agent to archive pending intents."
-5. Read data/pending_paper_orders_history.jsonl. For each archived intent, submit it with the Moomoo MCP sim_trade_input_order tool (paper account 5830137, market 100, side 1 for BUY, limit order at the intent price).
-6. Send reporting: "Run the reporting agent and confirm Slack post status."
+1. Fetch fresh account state with the Moomoo MCP tools and save to:
+   - sim_trade_position_list → data/mcp_positions.json
+   - sim_trade_history_order_list → data/mcp_orders.json
+   - sim_trade_cash_info → data/mcp_cash.json
+2. Send research: "Run the research agent and report equity, positions, and open orders."
+3. Send supervision: "Run the supervision agent and report any exit intents."
+4. If no halt and the book has room, send strategy: "Run the strategy agent and report the top candidate and any pending intents."
+5. Send risk: "Run the risk agent and confirm whether trading is allowed."
+6. If pending intents or exit intents exist and risk is green, send execution: "Run the execution agent to archive pending intents and exits."
+7. Read data/pending_paper_orders_history.jsonl. For each archived intent, submit it with the Moomoo MCP sim_trade_input_order tool (paper account 5830137, market 100). Use side=1 for BUY (new positions) and side=2 for SELL (exits). Use limit order at the intent price, order_type=1.
+8. Send reporting: "Run the reporting agent and confirm Slack post status."
+
+EOD report only:
+1. Fetch fresh account state as above.
+2. Send research.
+3. Send reporting.
 
 Always read data/agent_summary.json after a child reports back. Never skip the risk agent before execution. If any child returns an error, stop and report it."""
 

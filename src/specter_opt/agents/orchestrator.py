@@ -12,6 +12,7 @@ from specter_opt.agents.reporting_agent import ReportingAgent
 from specter_opt.agents.research_agent import ResearchAgent
 from specter_opt.agents.risk_agent import RiskAgent
 from specter_opt.agents.strategy_agent import StrategyAgent
+from specter_opt.agents.supervision_agent import SupervisionAgent
 
 
 class Orchestrator:
@@ -21,6 +22,7 @@ class Orchestrator:
         self.context = context or AgentContext()
         self.agents: dict[str, Agent] = {
             "research": ResearchAgent(),
+            "supervision": SupervisionAgent(),
             "strategy": StrategyAgent(),
             "risk": RiskAgent(),
             "execution": ExecutionAgent(),
@@ -41,7 +43,7 @@ class Orchestrator:
 
     def run_pipeline(self, names: Optional[List[str]] = None) -> List[AgentResult]:
         if names is None:
-            names = ["research", "strategy", "risk", "execution", "reporting"]
+            names = ["research", "supervision", "strategy", "risk", "execution", "reporting"]
         results: List[AgentResult] = []
         for name in names:
             result = self.run_agent(name)
