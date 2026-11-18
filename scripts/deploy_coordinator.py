@@ -24,6 +24,7 @@ API = "https://api.qoder.com/api/v1/cloud"
 
 # Hard-coded after first creation. Change these if you recreate.
 DEFAULT_COORDINATOR_ID = "agent_00vtx968cg001u7ae5oi"
+DEFAULT_COORDINATOR_VERSION = 7
 DEFAULT_ENV_ID = "env_00vril0nfsgzldpyxwfm"
 
 TRADING_DEPLOYMENT_NAME = "SPECTER-OPT Trading Cycle"
@@ -66,7 +67,7 @@ def find_deployment(name: str) -> Optional[str]:
             url += f"&page={page}"
         data = call("GET", url)
         for dep in data.get("data", []):
-            if dep.get("name") == name:
+            if dep.get("name") == name and dep.get("archived_at") is None:
                 return dep["id"]
         if not data.get("has_more"):
             break
@@ -82,7 +83,7 @@ def create_one(name: str, cron: str, message: str) -> Optional[str]:
 
     body = {
         "name": name,
-        "agent": DEFAULT_COORDINATOR_ID,
+        "agent": {"id": DEFAULT_COORDINATOR_ID, "type": "agent", "version": DEFAULT_COORDINATOR_VERSION},
         "environment_id": DEFAULT_ENV_ID,
         "schedule": {
             "type": "cron",
