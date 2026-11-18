@@ -15,13 +15,19 @@ from pathlib import Path
 
 
 def load_webhook(env_path: str) -> str:
-    """Load SLACK_WEBHOOK_URL from a dotenv-style file or environment."""
-    if env_path and Path(env_path).exists():
-        with open(env_path, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("SLACK_WEBHOOK_URL="):
-                    return line.split("=", 1)[1].strip()
+    """Load SLACK_WEBHOOK_URL from a dotenv-style file or environment.
+
+    The caller-supplied path is tried first, then a persistent mount fallback
+    (`/mnt/.slack_webhook.env`) so Forward schedules can read the secret even
+    when their local repo checkout does not include it.
+    """
+    for path in (env_path, "/mnt/.slack_webhook.env"):
+        if path and Path(path).exists():
+            with open(path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("SLACK_WEBHOOK_URL="):
+                        return line.split("=", 1)[1].strip()
     url = os.environ.get("SLACK_WEBHOOK_URL", "")
     if not url:
         raise RuntimeError("SLACK_WEBHOOK_URL not found")
