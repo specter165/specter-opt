@@ -26,6 +26,10 @@ API = "https://api.qoder.com/api/v1/cloud"
 DEFAULT_COORDINATOR_ID = "agent_00vtx968cg001u7ae5oi"
 DEFAULT_COORDINATOR_VERSION = 7
 DEFAULT_ENV_ID = "env_00vril0nfsgzldpyxwfm"
+DEFAULT_VAULT_IDS = [
+    "vault_00vtyrlil9hxd3nbej0l",  # moomoo agents
+    "vault_00voblx551vr4b8o5ki8",  # moomoo-mcp
+]
 
 TRADING_DEPLOYMENT_NAME = "SPECTER-OPT Trading Cycle"
 TRADING_CRON = "*/30 10-15 * * 1-5"
@@ -85,6 +89,7 @@ def create_one(name: str, cron: str, message: str) -> Optional[str]:
         "name": name,
         "agent": {"id": DEFAULT_COORDINATOR_ID, "type": "agent", "version": DEFAULT_COORDINATOR_VERSION},
         "environment_id": DEFAULT_ENV_ID,
+        "vault_ids": DEFAULT_VAULT_IDS,
         "schedule": {
             "type": "cron",
             "expression": cron,
