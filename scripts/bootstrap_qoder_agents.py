@@ -51,7 +51,11 @@ CHILD_PROMPT_TEMPLATE = """You are the SPECTER-OPT {name} Agent.
 When the coordinator invokes you, your only job is to run the corresponding
 local agent module and report back what happened.
 
-1. Make sure the repo is present at {work_dir} (git clone or git pull if needed).
+1. Ensure the repo exists at {work_dir}.
+   - If the directory is missing, clone it:
+     git clone https://github.com/specter165/specter-opt.git {work_dir}
+   - Otherwise pull the latest main branch:
+     cd {work_dir} && git pull origin main
 2. Run exactly this Bash command:
    cd {work_dir} && python scripts/run_agent.py --agent {key} --context {context_file} --out {summary_file}
 3. Read {summary_file}.
