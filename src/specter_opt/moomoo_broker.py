@@ -15,6 +15,28 @@ from specter_opt.broker import (
     Position,
 )
 
+# sim_trade_* numeric order statuses (4=filled and beyond are terminal).
+_LIVE_ORDER_STATUS = {1, 2, 3}
+_LIVE_ORDER_NAMES = {"NEW", "SUBMITTED", "PARTIAL_FILLED", "PENDING_NEW"}
+
+
+def _qty(row: dict) -> int:
+    return int(row.get("qty", row.get("quantity", 0)) or 0)
+
+
+def _is_live_order(order: dict) -> bool:
+    raw = order.get("order_status", order.get("status"))
+    if isinstance(raw, int):
+        live = raw in _LIVE_ORDER_STATUS
+    else:
+        live = str(raw).upper() in _LIVE_ORDER_NAMES
+    if not live:
+        return False
+    filled = int(
+        order.get("cum_qty", order.get("dealt_qty", order.get("filled_qty", 0))) or 0
+    )
+    return _qty(order) > filled
+
 
 class MoomooPaperBroker(BrokerAdapter):
     """Static adapter constructed from already-queried MCP data."""
@@ -51,6 +73,8 @@ class MoomooPaperBroker(BrokerAdapter):
     def list_positions(self) -> List[Position]:
         out = []
         for p in self._positions:
+            if _qty(p) <= 0:
+                continue
             out.append(
                 Position(
                     symbol=p.get("symbol", ""),
@@ -58,7 +82,7 @@ class MoomooPaperBroker(BrokerAdapter):
                     right=p.get("right", ""),
                     strike=float(p.get("strike", 0.0)),
                     expiry=p.get("expiry", ""),
-                    quantity=int(p.get("quantity", 0)),
+                    quantity=_qty(p),
                     entry_price=float(p.get("entry_price", 0.0)),
                     multiplier=int(p.get("multiplier", 100)),
                     market_price=float(p.get("market_price", 0.0)),
@@ -71,13 +95,15 @@ class MoomooPaperBroker(BrokerAdapter):
     def list_open_orders(self) -> List[BrokerOrder]:
         out = []
         for o in self._open_orders:
+            if not _is_live_order(o):
+                continue
             out.append(
                 BrokerOrder(
                     order_id=o.get("order_id"),
                     intent_id=o.get("intent_id", ""),
                     symbol=o.get("symbol", ""),
                     side=o.get("side", ""),
-                    quantity=int(o.get("quantity", 0)),
+                    quantity=_qty(o),
                     price=o.get("price"),
                     order_type=o.get("order_type", ""),
                     status=o.get("status", "UNKNOWN"),
