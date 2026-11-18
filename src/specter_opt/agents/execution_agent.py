@@ -49,13 +49,19 @@ class ExecutionAgent(Agent):
         }
         errors: list[str] = []
 
-        if context.halt:
-            output["note"] = "Execution skipped: global halt active"
-            context.add_event("Execution: skipped due to halt")
-            return AgentResult(agent_name=self.name, success=True, output=output)
-
         pending = context.data.get("pending_intents") or self._load_jsonl(context.pending_orders_path)
         exits = context.data.get("exit_intents") or []
+
+        if context.halt:
+            if exits:
+                output["note"] = "Global halt active: processing only protective exits"
+                context.add_event("Execution: halt active, processing only exits")
+                pending = []
+            else:
+                output["note"] = "Execution skipped: global halt active"
+                context.add_event("Execution: skipped due to halt")
+                return AgentResult(agent_name=self.name, success=True, output=output)
+
         all_intents = (pending or []) + (exits or [])
         if not all_intents:
             output["note"] = "No pending intents or exits"
