@@ -2,10 +2,8 @@
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-
-import pytz
 
 
 def load_jsonl(path: str) -> List[Dict[str, Any]]:
@@ -62,7 +60,7 @@ th {{ background: #e9ecef; }}
 </head>
 <body>
 <h1>SPECTER-OPT Dashboard</h1>
-<p>Generated: {datetime.now(pytz.UTC).isoformat()} UTC</p>
+<p>Generated: {datetime.now(timezone.utc).isoformat()} UTC</p>
 <h2>State</h2>
 <table>
 <tr><th>Field</th><th>Value</th></tr>

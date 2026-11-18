@@ -43,20 +43,18 @@ class ReportingAgent(Agent):
             context.add_event(f"Reporting dashboard error: {e}")
 
         try:
-            if Path(context.run_result_path).exists():
-                self._run_subprocess(
-                    [
-                        sys.executable,
-                        "scripts/daily_slack_update.py",
-                        "--result",
-                        context.run_result_path,
-                    ]
-                )
-                output["slack_posted"] = True
-                context.add_event("Reporting: Slack summary posted")
-            else:
-                output["slack_posted"] = False
-                context.add_event("Reporting: no run result to post")
+            cmd = [
+                sys.executable,
+                "scripts/daily_slack_update.py",
+                "--result",
+                context.run_result_path,
+            ]
+            if not Path(context.run_result_path).exists():
+                # EOD-only runs do not produce a run_result; fall back to MCP data.
+                cmd.append("--mcp-fallback")
+            self._run_subprocess(cmd)
+            output["slack_posted"] = True
+            context.add_event("Reporting: Slack summary posted")
         except Exception as e:
             errors.append(str(e))
             context.add_event(f"Reporting Slack error: {e}")
