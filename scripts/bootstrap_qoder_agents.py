@@ -110,6 +110,9 @@ Child roster:
 Trading cycle:
 1. Refresh the repo and market data before anything else:
    a. `cd {work_dir} && bash scripts/sync_repo.sh` (clones or hard-resets to origin/main).
+      If the directory does not exist yet, clone it first:
+      `git clone --depth 1 https://github.com/specter165/specter-opt.git {work_dir}`
+      then run `cd {work_dir} && bash scripts/sync_repo.sh`.
    b. `mkdir -p data/chains data/quotes`
    c. Save account state with the Moomoo MCP tools:
       - sim_trade_position_list → data/mcp_positions.json
@@ -203,7 +206,7 @@ def create_coordinator(children: Dict[str, str]) -> str:
         "name": "SPECTER-OPT Coordinator",
         "description": "Orchestrates the SPECTER-OPT paper-trading pipeline",
         "model": "ultimate",
-        "system": COORDINATOR_SYSTEM,
+        "system": COORDINATOR_SYSTEM.format(work_dir=WORK_DIR),
         "tools": COORDINATOR_TOOLS,
         "multiagent": {
             "type": "coordinator",
