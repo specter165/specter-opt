@@ -237,6 +237,54 @@ def build_quote_map(snapshot_json: Optional[dict]) -> Dict[str, dict]:
     return out
 
 
+def parse_option_screen(screen_json: dict) -> tuple:
+    """Parse quote_option_screen output into chains + underlying quotes.
+
+    The screener already carries bid/ask/OI/volume/IV/delta for each contract,
+    so one response replaces quote_option_chain + quote_market_snapshot.
+    """
+    chains: Dict[str, List[dict]] = {}
+    quotes: Dict[str, dict] = {}
+    for item in screen_json.get("data", {}).get("option_list", []):
+        code = item.get("code", "")
+        m = re.match(r"^([A-Z]+)(\d{6})([CP])(\d+)$", code.split(".")[-1])
+        if not m:
+            continue
+        sym, ymd, cp, strike_raw = m.groups()
+        expiry = f"20{ymd[:2]}-{ymd[2:4]}-{ymd[4:6]}"
+        chains.setdefault(sym, []).append(
+            {
+                "symbol": code,
+                "underlying": sym,
+                "right": "CALL" if cp == "C" else "PUT",
+                "strike": float(item.get("strike_price", 0.0) or 0.0),
+                "expiry": expiry,
+                "multiplier": 100,
+                "bid": float(item.get("bid_price", 0.0) or 0.0),
+                "ask": float(item.get("ask_price", 0.0) or 0.0),
+                "bid_size": int(item.get("bid_volume", 0) or 0),
+                "ask_size": int(item.get("ask_volume", 0) or 0),
+                "open_interest": int(item.get("open_interest", 0) or 0),
+                "volume": int(item.get("volume", 0) or 0),
+                "iv": normalize_iv(item.get("implied_volatility")),
+                "delta": item.get("delta"),
+                "gamma": None,
+                "theta": None,
+                "vega": None,
+                "quote_age_seconds": 0.0,
+            }
+        )
+        underlying = item.get("underlying", {}) or {}
+        if sym not in quotes and underlying.get("price"):
+            quotes[sym] = {
+                "last": float(underlying.get("price", 0.0) or 0.0),
+                "bid": 0.0,
+                "ask": 0.0,
+                "iv": normalize_iv(underlying.get("iv")),
+            }
+    return chains, quotes
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build SPECTER-OPT snapshot from MCP JSON files")
     parser.add_argument("--account", required=True, help="sim_trade_cash_info JSON")
@@ -255,6 +303,8 @@ def main():
     parser.add_argument("--universe", help="data/universe.json from build_universe.py; restricts and orders the universe")
     parser.add_argument("--option-snapshot", action="append", default=[],
                         help="quote_market_snapshot JSON for option contracts; repeatable (batches merge)")
+    parser.add_argument("--screen", action="append", default=[],
+                        help="quote_option_screen JSON; provides chains and quotes in one file (repeatable)")
     parser.add_argument("--returns-cache", help="returns_cache JSON")
     parser.add_argument("--out", default="data/snapshot_live.json", help="Output path")
     args = parser.parse_args()
@@ -276,8 +326,8 @@ def main():
     for sym, path in (("SPY", args.spy_quote), ("QQQ", args.qqq_quote)):
         if path:
             quote_paths.setdefault(sym, path)
-    if not chain_paths or not quote_paths:
-        parser.error("provide at least one --chain and one --quote (or legacy --spy-chain/--spy-quote)")
+    if (not chain_paths or not quote_paths) and not args.screen:
+        parser.error("provide at least one --chain and one --quote, or a --screen file")
     missing_quotes = sorted(set(chain_paths) - set(quote_paths))
     if missing_quotes:
         parser.error(f"missing --quote for: {', '.join(missing_quotes)}")
@@ -303,6 +353,12 @@ def main():
 
     chains: Dict[str, List[dict]] = {}
     quotes_by_symbol: Dict[str, dict] = {}
+    for path in args.screen:
+        s_chains, s_quotes = parse_option_screen(load_json(path))
+        for sym, rows in s_chains.items():
+            chains.setdefault(sym, []).extend(rows)
+        for sym, q in s_quotes.items():
+            quotes_by_symbol.setdefault(sym, q)
     for sym, path in chain_paths.items():
         chains[sym] = merge_quotes(parse_option_chain(load_json(path), sym), option_snapshot)
     for sym, path in quote_paths.items():

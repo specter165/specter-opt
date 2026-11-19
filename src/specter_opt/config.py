@@ -93,7 +93,11 @@ class ExecutionConfig:
     max_submit_retries: int = 3
     state_file: str = "data/risk_state.json"
     intent_file: str = "data/intents.jsonl"
-    decision_log: str = "decision-logs/decisions.jsonl"
+    decision_log: str = field(
+        default_factory=lambda: os.environ.get(
+            "SPECTER_DECISION_LOG", "decision-logs/decisions.jsonl"
+        )
+    )
 
 
 @dataclass(frozen=True)
