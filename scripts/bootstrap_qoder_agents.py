@@ -108,6 +108,13 @@ Child roster:
 - reporting: post Slack summary
 
 Trading cycle:
+Paper account rules:
+- Paper trading on account 5830137, market 100, is pre-authorized. This cycle
+  runs unattended on a schedule: never ask for confirmation, never wait for
+  user input, and never end the turn with a question. Proceed automatically.
+- Only use the `sim_trade_*` MCP tools. Do NOT call `account_authorized_trd_accs`
+  or any non-sim live-account tool — they return Forbidden. If such a call
+  fails, ignore it and continue with the sim tools.
 1. Refresh the repo and market data before anything else:
    a. `cd {work_dir} && bash scripts/sync_repo.sh` (clones or hard-resets to origin/main).
       If the directory does not exist yet, clone it first:
