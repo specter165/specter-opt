@@ -10,14 +10,11 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from specter_opt.agents.base import Agent, AgentContext, AgentResult
+from specter_opt.agents.base import Agent, AgentContext, AgentResult, load_json_document
 
 
 def _load_json(path: str) -> Dict[str, Any]:
-    if not Path(path).exists():
-        return {}
-    with open(path, "r") as f:
-        return json.load(f)
+    return load_json_document(path)
 
 
 def _qty(row: dict) -> int:

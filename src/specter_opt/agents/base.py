@@ -1,5 +1,6 @@
 """Base classes for SPECTER-OPT multi-agent system."""
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -101,3 +102,21 @@ class Agent(ABC):
     def run(self, context: AgentContext) -> AgentResult:
         """Execute the agent's responsibility and return a result."""
         ...
+
+
+def load_json_document(path: str) -> Dict[str, Any]:
+    """Load a JSON file, tolerating a second appended document.
+
+    Cloud agents sometimes append a second JSON blob to a data file; strict
+    json.load would then raise "Extra data" and abort the whole cycle.
+    """
+    from pathlib import Path as _Path
+    if not _Path(path).exists():
+        return {}
+    with open(path, "r") as f:
+        text = f.read()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        value, _ = json.JSONDecoder().raw_decode(text.lstrip())
+        return value

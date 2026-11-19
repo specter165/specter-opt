@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from specter_opt.agents.base import Agent, AgentContext, AgentResult
+from specter_opt.agents.base import Agent, AgentContext, AgentResult, load_json_document
 
 # sim_trade_* numeric order statuses (4=filled and beyond are terminal).
 _LIVE_ORDER_STATUS = {1, 2, 3}
@@ -35,8 +35,7 @@ class ResearchAgent(Agent):
     def _load_json(self, path: str) -> Dict[str, Any]:
         if not Path(path).exists():
             return {}
-        with open(path, "r") as f:
-            return json.load(f)
+        return load_json_document(path)
 
     def run(self, context: AgentContext) -> AgentResult:
         output: Dict[str, Any] = {"timestamp": datetime.utcnow().isoformat()}

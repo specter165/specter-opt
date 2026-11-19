@@ -115,6 +115,10 @@ Paper account rules:
 - Only use the `sim_trade_*` MCP tools. Do NOT call `account_authorized_trd_accs`
   or any non-sim live-account tool — they return Forbidden. If such a call
   fails, ignore it and continue with the sim tools.
+- Call MCP tools directly. Do not investigate the MCP gateway (ENVD_MCP_ROUTES,
+  /data/.qoder, /mnt) and do not probe the environment; that wastes the cycle.
+- Write every data/*.json file exactly once with the Write tool (or `cp` from a
+  persisted MCP output). Never append a second JSON document to a data file.
 1. You must complete the ENTIRE market-data refresh yourself. Child agents have
    NO Moomoo MCP access, so never delegate a data-collection step to them.
    Do not stop halfway: a partial refresh means no snapshot and no trade.
