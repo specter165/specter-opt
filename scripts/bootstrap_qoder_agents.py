@@ -115,13 +115,16 @@ Paper account rules:
 - Only use the `sim_trade_*` MCP tools. Do NOT call `account_authorized_trd_accs`
   or any non-sim live-account tool — they return Forbidden. If such a call
   fails, ignore it and continue with the sim tools.
-1. Refresh the repo and market data before anything else:
+1. You must complete the ENTIRE market-data refresh yourself. Child agents have
+   NO Moomoo MCP access, so never delegate a data-collection step to them.
+   Do not stop halfway: a partial refresh means no snapshot and no trade.
    a. `cd {work_dir} && bash scripts/sync_repo.sh` (clones or hard-resets to origin/main).
       If the directory does not exist yet, clone it first:
       `git clone --depth 1 https://github.com/specter165/specter-opt.git {work_dir}`
       then run `cd {work_dir} && bash scripts/sync_repo.sh`.
-   b. `mkdir -p data/chains data/quotes`
-   c. Save account state with the Moomoo MCP tools:
+   b. `mkdir -p data/chains data/quotes data/kline`
+   c. Save account state with the Moomoo MCP tools (these return small JSON —
+      write it directly with the Write tool):
       - sim_trade_position_list → data/mcp_positions.json
       - sim_trade_history_order_list → data/mcp_orders.json
       - sim_trade_cash_info → data/mcp_cash.json
@@ -130,13 +133,20 @@ Paper account rules:
       quote_option_screen (US stock options, DTE 7-45, delta 0.25-0.75) and
       save the raw JSON to data/mcp_option_screen.json, then run
       `python scripts/build_universe.py --input data/mcp_option_screen.json --out data/universe.json`.
-   e. For every symbol in data/universe.json, call quote_option_chain for
-      7..21 DTE and save to data/chains/SYM.json, and call
-      quote_stock_quote for US.SYM and save to data/quotes/SYM_underlying.json.
-   f. Collect the contract codes returned in those chains and call
-      quote_market_snapshot in batches of at most 400 codes. Save each batch
-      to data/quotes/options_batch_N.json.
-   g. Build the snapshot:
+   e. For every symbol in data/universe.json:
+      - call quote_option_chain (7..21 DTE) → data/chains/SYM.json
+      - call quote_stock_quote for US.SYM → data/quotes/SYM_underlying.json
+      - call quote_cur_kline (day K, num 60) → data/kline/SYM.json
+      Large MCP results are persisted to /tmp/tool-outputs/...; copy the
+      referenced file to the destination path with Bash `cp` in that case.
+   f. `python scripts/build_returns_cache.py --kline SYM=data/kline/SYM.json ... --out data/returns_cache.json`
+      (repeat --kline for every symbol in the universe).
+   g. Collect every contract code returned by the chains and call
+      quote_market_snapshot in batches of at most 400 codes, saving each batch
+      to data/quotes/options_batch_1.json, options_batch_2.json, ...
+   h. Build the snapshot, passing one --chain, --quote and --option-snapshot
+      flag per file you actually produced (paths are SYM=path, e.g.
+      `--chain NVDA=data/chains/NVDA.json`):
       `python scripts/build_snapshot.py --account data/mcp_cash.json \
        --account-meta data/mcp_accounts.json --positions data/mcp_positions.json \
        --orders data/mcp_orders.json --universe data/universe.json \
@@ -145,6 +155,7 @@ Paper account rules:
        --returns-cache data/returns_cache.json --out data/snapshot_live.json`
       If this exits non-zero (e.g. DATA_STALE), STOP the cycle and report the
       error. Do not run the strategy agent on an empty or stale snapshot.
+Only after data/snapshot_live.json exists may you spawn any child agent.
 2. Send research: "Run the research agent and report equity, positions, and open orders."
 3. Send supervision: "Run the supervision agent and report any exit intents."
 4. If no halt and the book has room, send strategy: "Run the strategy agent and report the top candidate and any pending intents."
