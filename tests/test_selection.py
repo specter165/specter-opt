@@ -90,8 +90,8 @@ def test_size_candidate_within_budget():
     scen = make_scenarios(spot=100.0, iv=0.18)
     cand = evaluate_candidate(c, scen, cfg)
     qty = size_candidate(cand, 100000.0, 0.0, 0.0, 0.0, cfg)
-    # Per-trade budget is 1.5% of equity ($1,500); each contract ~$200 + fees.
-    assert 0 < qty <= 8
+    # Per-trade budget is 1% of equity ($1,000); each contract ~$200 + fees.
+    assert 0 < qty <= 5
 
 
 if __name__ == "__main__":

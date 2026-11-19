@@ -33,8 +33,8 @@ def test_peak_drawdown_halt():
     guard, path = make_guard()
     d = date(2026, 11, 17)
     guard.reset_day(100000.0, d)
-    guard.update_equity(106000.0, d)  # push peak 6% above day-start
-    ok, reason = guard.update_equity(98400.0, d)  # daily loss 1.6%, peak drawdown 7.2%
+    guard.update_equity(104000.0, d)  # push peak 4% above day-start
+    ok, reason = guard.update_equity(98700.0, d)  # daily loss 1.3%, peak drawdown 5.1%
     assert not ok
     assert "peak_drawdown" in reason
     assert guard.state.halted
@@ -74,7 +74,7 @@ def test_aggregate_premium_limit():
         ask=0.5,
         multiplier=100,
         fee_result=fee,
-        existing_positions_premium=4960.0,
+        existing_positions_premium=2960.0,
         pending_order_premium=0.0,
         ny_date=d,
     )

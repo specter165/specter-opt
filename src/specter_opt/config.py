@@ -9,15 +9,13 @@ from typing import Dict, List, Optional, Tuple
 class RiskConfig:
     """Internal risk ceilings; official competition rules may be stricter."""
 
-    # More aggressive sizing than the original 3%/3-position design:
-    # up to 4 concurrent positions, each sized up to 1.5% equity,
-    # capping total open premium at 5% of equity. Raised halt to keep
-    # the circuit breaker above the max possible premium wipe.
-    per_trade_premium_pct: float = 0.015
-    aggregate_premium_pct: float = 0.050
-    max_concurrent_positions: int = 4
+    # Original conservative sizing: 1.0% per trade, 3.0% aggregate,
+    # 3 concurrent positions, 5% peak-drawdown halt.
+    per_trade_premium_pct: float = 0.010
+    aggregate_premium_pct: float = 0.030
+    max_concurrent_positions: int = 3
     daily_equity_loss_block_pct: float = 0.02
-    peak_drawdown_halt_pct: float = 0.07
+    peak_drawdown_halt_pct: float = 0.05
     max_orders_per_us_trading_day: int = 20
     allow_short_options: bool = False
     allow_borrowing: bool = False
