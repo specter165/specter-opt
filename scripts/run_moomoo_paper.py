@@ -103,6 +103,17 @@ def main():
     args = parser.parse_args()
 
     snapshot = load_snapshot(args.snapshot)
+    quoted = {
+        sym: sum(1 for c in rows if float(c.get("ask", 0) or 0) > 0)
+        for sym, rows in snapshot.get("option_chains", {}).items()
+    }
+    if not any(quoted.values()):
+        print(
+            "ERROR: DATA_STALE: snapshot has no quoted option contracts "
+            f"({quoted or 'no chains'}). Refusing to report NO_TRADE on empty data.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     config = AgentConfig(mode=args.mode)
     assistant_submits = args.assistant_submits or (args.mode == "paper")
     broker = build_broker(snapshot, args.mode, assistant_submits)

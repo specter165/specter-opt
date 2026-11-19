@@ -51,11 +51,11 @@ CHILD_PROMPT_TEMPLATE = """You are the SPECTER-OPT {name} Agent.
 When the coordinator invokes you, your only job is to run the corresponding
 local agent module and report back what happened.
 
-1. Ensure the repo exists at {work_dir}.
+1. Ensure the repo at {work_dir} is current:
    - If the directory is missing, clone it:
      git clone https://github.com/specter165/specter-opt.git {work_dir}
-   - Otherwise pull the latest main branch:
-     cd {work_dir} && git pull origin main
+   - Otherwise sync it:
+     cd {work_dir} && bash scripts/sync_repo.sh
 2. Run exactly this Bash command:
    cd {work_dir} && python scripts/run_agent.py --agent {key} --context {context_file} --out {summary_file}
 3. Read {summary_file}.
@@ -108,10 +108,33 @@ Child roster:
 - reporting: post Slack summary
 
 Trading cycle:
-1. Fetch fresh account state with the Moomoo MCP tools and save to:
-   - sim_trade_position_list → data/mcp_positions.json
-   - sim_trade_history_order_list → data/mcp_orders.json
-   - sim_trade_cash_info → data/mcp_cash.json
+1. Refresh the repo and market data before anything else:
+   a. `cd {work_dir} && bash scripts/sync_repo.sh` (clones or hard-resets to origin/main).
+   b. `mkdir -p data/chains data/quotes`
+   c. Save account state with the Moomoo MCP tools:
+      - sim_trade_position_list → data/mcp_positions.json
+      - sim_trade_history_order_list → data/mcp_orders.json
+      - sim_trade_cash_info → data/mcp_cash.json
+      - sim_trade_account_list → data/mcp_accounts.json
+   d. Universe: if data/universe.json is missing or older than 8 hours, call
+      quote_option_screen (US stock options, DTE 7-45, delta 0.25-0.75) and
+      save the raw JSON to data/mcp_option_screen.json, then run
+      `python scripts/build_universe.py --input data/mcp_option_screen.json --out data/universe.json`.
+   e. For every symbol in data/universe.json, call quote_option_chain for
+      7..21 DTE and save to data/chains/SYM.json, and call
+      quote_stock_quote for US.SYM and save to data/quotes/SYM_underlying.json.
+   f. Collect the contract codes returned in those chains and call
+      quote_market_snapshot in batches of at most 400 codes. Save each batch
+      to data/quotes/options_batch_N.json.
+   g. Build the snapshot:
+      `python scripts/build_snapshot.py --account data/mcp_cash.json \
+       --account-meta data/mcp_accounts.json --positions data/mcp_positions.json \
+       --orders data/mcp_orders.json --universe data/universe.json \
+       --chain SYM=data/chains/SYM.json ... --quote SYM=data/quotes/SYM_underlying.json ... \
+       --option-snapshot data/quotes/options_batch_1.json ... \
+       --returns-cache data/returns_cache.json --out data/snapshot_live.json`
+      If this exits non-zero (e.g. DATA_STALE), STOP the cycle and report the
+      error. Do not run the strategy agent on an empty or stale snapshot.
 2. Send research: "Run the research agent and report equity, positions, and open orders."
 3. Send supervision: "Run the supervision agent and report any exit intents."
 4. If no halt and the book has room, send strategy: "Run the strategy agent and report the top candidate and any pending intents."

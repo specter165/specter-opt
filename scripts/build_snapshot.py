@@ -253,7 +253,8 @@ def main():
     parser.add_argument("--qqq-quote", help="(legacy) quote_stock_quote JSON")
     parser.add_argument("--earnings", help="JSON map {symbol: [YYYY-MM-DD, ...]} for earnings blackout")
     parser.add_argument("--universe", help="data/universe.json from build_universe.py; restricts and orders the universe")
-    parser.add_argument("--option-snapshot", help="quote_market_snapshot JSON for option contracts")
+    parser.add_argument("--option-snapshot", action="append", default=[],
+                        help="quote_market_snapshot JSON for option contracts; repeatable (batches merge)")
     parser.add_argument("--returns-cache", help="returns_cache JSON")
     parser.add_argument("--out", default="data/snapshot_live.json", help="Output path")
     args = parser.parse_args()
@@ -296,7 +297,9 @@ def main():
     positions = parse_positions(load_json(args.positions))
     open_orders = parse_orders(load_json(args.orders) if args.orders else None)
 
-    option_snapshot = build_quote_map(load_json(args.option_snapshot) if args.option_snapshot else None)
+    option_snapshot: Dict[str, dict] = {}
+    for path in args.option_snapshot:
+        option_snapshot.update(build_quote_map(load_json(path)))
 
     chains: Dict[str, List[dict]] = {}
     quotes_by_symbol: Dict[str, dict] = {}
@@ -305,12 +308,27 @@ def main():
     for sym, path in quote_paths.items():
         quotes_by_symbol[sym] = parse_stock_quote(load_json(path), f"US.{sym}")
 
+    # A chain that parsed but has no quoted contracts (bid/ask zero) makes the
+    # engine report NO_TRADE / candidate_count=0 instead of surfacing bad data.
+    # Refuse to write such a snapshot so the caller fails loudly.
+    quoted = {sym: len(rows) for sym, rows in chains.items()}
+    print("Quoted contracts per symbol: " + ", ".join(f"{k}={v}" for k, v in quoted.items()))
+    if not any(quoted.values()):
+        print(
+            "ERROR: DATA_STALE: every option chain has 0 quoted contracts. "
+            "Re-fetch quote_market_snapshot for the contracts and check that "
+            "the quote file matches the chain symbols.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     snapshot = {
         "account": account,
         "positions": positions,
         "open_orders": open_orders,
         "option_chains": chains,
         "underlying_quotes": quotes_by_symbol,
+        "built_at": datetime.now(timezone.utc).isoformat(),
     }
 
     if args.earnings:
