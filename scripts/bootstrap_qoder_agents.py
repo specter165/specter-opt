@@ -126,9 +126,10 @@ Paper account rules:
       If the directory does not exist yet, clone it first:
       `git clone --depth 1 https://github.com/specter165/specter-opt.git {work_dir}`
       then run `cd {work_dir} && bash scripts/sync_repo.sh`.
-   b. `mkdir -p data/chains data/quotes data/kline`
-   c. Save account state with the Moomoo MCP tools (these return small JSON —
-      write it directly with the Write tool):
+   b. `python -m pip install --quiet -r requirements.txt`
+      `mkdir -p data/screen data/kline`
+   c. Save account state with the Moomoo MCP tools (small JSON — write it
+      directly with the Write tool):
       - sim_trade_position_list → data/mcp_positions.json
       - sim_trade_history_order_list → data/mcp_orders.json
       - sim_trade_cash_info → data/mcp_cash.json
@@ -137,25 +138,25 @@ Paper account rules:
       quote_option_screen (US stock options, DTE 7-45, delta 0.25-0.75) and
       save the raw JSON to data/mcp_option_screen.json, then run
       `python scripts/build_universe.py --input data/mcp_option_screen.json --out data/universe.json`.
-   e. For every symbol in data/universe.json:
-      - call quote_option_chain (7..21 DTE) → data/chains/SYM.json
-      - call quote_stock_quote for US.SYM → data/quotes/SYM_underlying.json
-      - call quote_cur_kline (day K, num 60) → data/kline/SYM.json
-      Large MCP results are persisted to /tmp/tool-outputs/...; copy the
-      referenced file to the destination path with Bash `cp` in that case.
-   f. `python scripts/build_returns_cache.py --kline SYM=data/kline/SYM.json ... --out data/returns_cache.json`
-      (repeat --kline for every symbol in the universe).
-   g. Collect every contract code returned by the chains and call
-      quote_market_snapshot in batches of at most 400 codes, saving each batch
-      to data/quotes/options_batch_1.json, options_batch_2.json, ...
-   h. Build the snapshot, passing one --chain, --quote and --option-snapshot
-      flag per file you actually produced (paths are SYM=path, e.g.
-      `--chain NVDA=data/chains/NVDA.json`):
+   e. `quote_stock_basicinfo` for every `US.SYM` in the universe → data/mcp_basicinfo.json
+   f. `python scripts/plan_screen_calls.py --universe data/universe.json \
+        --basicinfo data/mcp_basicinfo.json --out data/screen_plan.json`
+      It prints one screener request per symbol (stock_id + strategy + field_filter).
+   g. For EVERY symbol in data/screen_plan.json, call quote_option_screen with
+      exactly that `strategy` and `field_filter` (limit 200) and save the raw
+      JSON to data/screen/SYM.json. One call per symbol (~8 calls). This is the
+      quote source: it already carries bid/ask/OI/volume/IV/delta and the
+      underlying price/IV, so no quote_option_chain and no
+      quote_market_snapshot are needed. Do not stop after one symbol.
+   h. If data/returns_cache.json is missing, fetch quote_cur_kline (day K,
+      num 60) per symbol → data/kline/SYM.json, then run
+      `python scripts/build_returns_cache.py --kline SYM=data/kline/SYM.json ... \
+        --out data/returns_cache.json`.
+   i. Build the snapshot, passing one --screen flag per screen file produced:
       `python scripts/build_snapshot.py --account data/mcp_cash.json \
        --account-meta data/mcp_accounts.json --positions data/mcp_positions.json \
        --orders data/mcp_orders.json --universe data/universe.json \
-       --chain SYM=data/chains/SYM.json ... --quote SYM=data/quotes/SYM_underlying.json ... \
-       --option-snapshot data/quotes/options_batch_1.json ... \
+       --screen data/screen/NVDA.json --screen data/screen/TLT.json ... \
        --returns-cache data/returns_cache.json --out data/snapshot_live.json`
       If this exits non-zero (e.g. DATA_STALE), STOP the cycle and report the
       error. Do not run the strategy agent on an empty or stale snapshot.
